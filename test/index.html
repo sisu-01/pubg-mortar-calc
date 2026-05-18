@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UE4 Heightmap Viewer in Three.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: sans-serif;
+        }
+        /* 상단 헤더 스타일 */
+        #header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(5px);
+            color: white;
+            padding: 10px 20px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            z-index: 10;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        #header label {
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+        #map-select {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 6px 12px;
+            font-size: 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            outline: none;
+        }
+        #map-select:hover {
+            background: #444;
+        }
+        /* 좌측 정보창 스타일 */
+        #info-panel {
+            position: absolute;
+            top: 70px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 14px;
+            line-height: 1.6;
+            z-index: 5;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            z-index: 5;
+            background: rgba(0,0,0,0.6);
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+    </style>
+    <!-- Three.js 및 OrbitControls CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <!-- 상단 헤더 (맵 선택 메뉴) -->
+    <div id="header">
+        <label for="map-select">MAP SELECT :</label>
+        <select id="map-select">
+            <option value="erangel">Erangel</option>
+            <option value="miramar">Miramar</option>
+            <option value="vikendi">Vikendi</option>
+            <option value="sanhok">Sanhok</option>
+            <option value="karakin">Karakin</option>
+            <option value="jackal" selected>Jackal</option>
+        </select>
+    </div>
+
+    <div id="loading" style="display: none;">하이트맵 로딩 중...</div>
+    
+    <div id="info-panel">
+        <h3 style="margin-top:0; border-bottom:1px solid #555; padding-bottom:5px;" id="current-map-title">지형 정보</h3>
+        <p>클릭한 위치 (World)</p>
+        X: <span id="pos-x">0</span> m<br>
+        Y: <span id="pos-y">0</span> m<br>
+        Z (Height): <span id="pos-z">0</span> m
+    </div>
+
+    <script>
+        // --- 글로벌 상수 설정 ---
+        const MAP_PIXELS = 8192;              
+        const SCALE_Z = 0.96;                 
+        const SEGMENTS = 512; 
+
+        // 맵별 개별 XY 스케일 정의 딕셔너리
+        const MAP_SCALES = {
+            'erangel': 0.9765625,
+            'miramar': 0.9765625,
+            'vikendi': 1.3020833333333333,
+            'sanhok':  0.9765625,
+            'karakin': 0.9765625,
+            'jackal':  0.48828125
+        };
+
+        // --- 기본 Three.js 세팅 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xa0b0d0);
+
+        // 비켄디처럼 거대한 맵도 담을 수 있도록 가시거리(far)를 2,000,000으로 크게 확장
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000000);
+        camera.position.set(0, 3000, 5000); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.maxPolarAngle = Math.PI / 2 - 0.01; 
+        controls.maxDistance = 1500000; // 최대 줌아웃 한계 확장
+
+        // --- 조명 세팅 ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(4000, 8000, 4000);
+        scene.add(dirLight);
+
+        // --- 레이캐스팅 변수 ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        let terrainMesh = null;
+        let seaMesh = null;
+
+        // --- 지형 로드 및 생성 함수 ---
+        function loadTerrain(mapName) {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('current-map-title').innerText = mapName.toUpperCase() + ' 지형 정보';
+
+            if (terrainMesh) {
+                scene.remove(terrainMesh);
+                terrainMesh.geometry.dispose();
+                terrainMesh.material.dispose();
+            }
+            if (seaMesh) {
+                scene.remove(seaMesh);
+                seaMesh.geometry.dispose();
+                seaMesh.material.dispose();
+            }
+
+            // 딕셔너리에서 해당 맵의 고유 SCALE_XY 가져오기
+            const currentScaleXY = MAP_SCALES[mapName] || 0.9765625;
+            const worldSize = MAP_PIXELS * currentScaleXY; 
+            
+            const heightmapUrl = `../image/heightmap/${mapName}_heightmap.png`;
+
+            const img = new Image();
+            img.src = heightmapUrl;
+            
+            img.onload = function() {
+                document.getElementById('loading').style.display = 'none';
+
+                const canvas = document.createElement('canvas');
+                canvas.width = SEGMENTS + 1;
+                canvas.height = SEGMENTS + 1;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, MAP_PIXELS, MAP_PIXELS, 0, 0, SEGMENTS + 1, SEGMENTS + 1);
+                
+                const imgData = ctx.getImageData(0, 0, SEGMENTS + 1, SEGMENTS + 1).data;
+
+                const geometry = new THREE.PlaneGeometry(worldSize, worldSize, SEGMENTS, SEGMENTS);
+                const position = geometry.attributes.position;
+                
+                for (let i = 0; i < position.count; i++) {
+                    const r = imgData[i * 4]; 
+                    // 맵 면적(스케일)이 커질 때 자연스러운 고저차 유지를 위해 높이 배율 조정 가능
+                    position.setZ(i, r * SCALE_Z * 4); 
+                }
+                geometry.computeVertexNormals();
+
+                const terrainMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x557a46,
+                    roughness: 0.8,
+                    metalness: 0.1,
+                    flatShading: true
+                });
+
+                terrainMesh = new THREE.Mesh(geometry, terrainMaterial);
+                terrainMesh.rotation.x = -Math.PI / 2; 
+                scene.add(terrainMesh);
+
+                // 바다 생성 (새로 계산된 worldSize에 맞춤)
+                const seaGeometry = new THREE.PlaneGeometry(worldSize, worldSize);
+                const seaMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x1d3557,
+                    transparent: true,
+                    opacity: 0.6,
+                    roughness: 0.2
+                });
+                seaMesh = new THREE.Mesh(seaGeometry, seaMaterial);
+                seaMesh.rotation.x = -Math.PI / 2;
+                seaMesh.position.y = 480; 
+                scene.add(seaMesh);
+
+                // 맵 스케일에 맞춰 카메라 포커스 및 위치 초기화 조정
+                controls.target.set(0, 0, 0);
+                camera.position.set(0, worldSize * 0.5, worldSize * 0.8);
+                controls.update();
+            };
+
+            img.onerror = function() {
+                document.getElementById('loading').style.display = 'none';
+                alert(`${heightmapUrl} 파일을 찾을 수 없습니다.\n배치 파일 구동 위치와 폴더 경로를 확인해 주세요.`);
+            };
+        }
+
+        const mapSelect = document.getElementById('map-select');
+        mapSelect.addEventListener('change', (e) => {
+            loadTerrain(e.target.value);
+        });
+
+        loadTerrain(mapSelect.value);
+
+        window.addEventListener('click', onMouseClick, false);
+
+        function onMouseClick(event) {
+            if (event.clientY < 60) return; 
+            if (!terrainMesh) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(terrainMesh);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                document.getElementById('pos-x').innerText = point.x.toFixed(2);
+                document.getElementById('pos-y').innerText = point.z.toFixed(2); 
+                document.getElementById('pos-z').innerText = point.y.toFixed(2); 
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 에란갤 0.9765625
+        // 미라마 0.9765625
+        // 비켄디 130.208333
+        // 사녹 0.9765625
+        // 카라킨 0.9765625
+        // 자칼 0.48828125
+    </script>
+</body>
+</html>
