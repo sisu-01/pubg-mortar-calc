@@ -4,6 +4,8 @@ import numpy as np
 import config
 from detector import find_marker_multi_scale
 from ballistics import get_mortar_in_game_distance, calculate_physical_distance, get_absolute_height
+# 🌟 [유지보수 향상] 독립 분리된 격자 제거 컴포넌트 모듈 호출
+from grid_remover import remove_pubg_grid
 
 def main():
     # 1. 이미지 로드 및 전처리
@@ -18,8 +20,12 @@ def main():
 
     gray_src = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
     
-    # 쪼개진 이미지의 메모리 독립성을 위해 .copy() 사용 권장
+    # 쪼개진 이미지의 메모리 독립성을 위해 .copy() 사용
     map_roi = gray_src[0:h, start_x : start_x + map_size].copy()
+    
+    # 🌟 [모듈 연동 부] 매칭 윈도우 전 단계에서 격자 필터링 수행
+    # 기본값으로 인게임 미니맵/지도 환경에 맞춘 grid_mode 지정 (2, 4, 8)
+    map_roi_cleaned = remove_pubg_grid(map_roi, grid_mode=8)
     
     tpl_player = cv2.imread("image/player.png", 0)
     tpl_marker = cv2.imread("image/marker.png", 0)
@@ -28,17 +34,17 @@ def main():
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
         return
 
-    # 2. 객체 탐지 수행 (지도 내부 영역인 map_roi 안에서만 클린하게 탐색)
+    # 2. 객체 탐지 수행 (모듈을 거쳐 격자가 완벽히 필터링된 이미지 타겟팅)
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
-    match_p = find_marker_multi_scale(map_roi, tpl_player, scale_range)
-    match_m = find_marker_multi_scale(map_roi, tpl_marker, scale_range)
+    match_p = find_marker_multi_scale(map_roi_cleaned, tpl_player, scale_range)
+    match_m = find_marker_multi_scale(map_roi_cleaned, tpl_marker, scale_range)
 
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
-        print("❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다.")
+        print("❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (모듈 처리 필터 상태를 점검하세요)")
         return
 
     # --------------------------------------------------------
-    # 🔄 [수정] 버그가 해결된 직관적인 좌표 변환 로직
+    # 🔄 버그가 해결된 직관적인 좌표 변환 로직 (그대로 유지)
     # --------------------------------------------------------
     p_top_left = match_p["max_loc"]
     m_top_left = match_m["max_loc"]
@@ -50,11 +56,11 @@ def main():
     m_roi_cx = m_top_left[0] + (match_m["w"] // 2)
     m_roi_cy = m_top_left[1] + match_m["h"]
 
-    # [단계 2] 하이트맵 매핑을 위한 지도 기준 상대 비율 계산 (start_x 차감 연산 불필요)
+    # [단계 2] 하이트맵 매핑을 위한 지도 기준 상대 비율 계산
     p_rx, p_ry = p_roi_cx / map_size, p_roi_cy / map_size
     m_rx, m_ry = m_roi_cx / map_size, m_roi_cy / map_size
 
-    # [단계 3] 원본 screen.png(전체 화면 크기) 위에 그리기 위한 좌표 변환 (X축에만 start_x 더하기)
+    # [단계 3] 원본 screen.png(전체 화면 크기) 위에 그리기 위한 좌표 변환
     p_cx = p_roi_cx + start_x
     p_cy = p_roi_cy
     
@@ -92,7 +98,7 @@ def main():
     cv2.circle(result_img, (m_cx, m_cy), 6, (0, 0, 255), -1) 
     cv2.line(result_img, (p_cx, p_cy), (m_cx, m_cy), (0, 255, 255), 2)
 
-    # 객체별 높이 텍스트 UI 생성 (검은 외곽선 + 흰 글씨)
+    # 객체별 높이 텍스트 UI 생성
     p_text = f"{player_z:.1f}m"
     m_text = f"{marker_z:.1f}m"
     
