@@ -66,12 +66,13 @@ def main():
     
     m_cx = m_roi_cx + start_x
     m_cy = m_roi_cy
-    # --------------------------------------------------------
-
-    # 3. 하이트맵 분석 및 고도 구하기
-    heightmap = cv2.imread("image/heightmap/jackal_heightmap.png", cv2.IMREAD_UNCHANGED)
+    
+    current_map = 'jackal'  # 💡 현재 분석 중인 맵 지정 (동적 변경 가능)
+    
+    heightmap_path = f"image/heightmap/{current_map}_heightmap.png"
+    heightmap = cv2.imread(heightmap_path, cv2.IMREAD_UNCHANGED)
     if heightmap is None:
-        print("[오류] 하이트맵 이미지를 로드할 수 없습니다.")
+        print(f"[오류] 하이트맵 이미지({heightmap_path})를 로드할 수 없습니다.")
         return
         
     hm_h, hm_w = heightmap.shape[:2]
@@ -80,8 +81,10 @@ def main():
     m_hx = max(0, min(int(m_rx * (hm_w - 1)), hm_w - 1))
     m_hy = max(0, min(int(m_ry * (hm_h - 1)), hm_h - 1))
 
+    # 안전장치: 혹시라도 정의되지 않은 맵 이름일 경우 기본값 지정
+    scale_xy = config.MAP_SCALES.get(current_map, 0.9765625)
     # 수평 거리 및 고도차 계산
-    x_dist = calculate_physical_distance(p_hx, p_hy, m_hx, m_hy)
+    x_dist = calculate_physical_distance(p_hx, p_hy, m_hx, m_hy, scale_xy)
     player_z = get_absolute_height(heightmap, p_hx, p_hy)
     marker_z = get_absolute_height(heightmap, m_hx, m_hy)
     h_diff = marker_z - player_z

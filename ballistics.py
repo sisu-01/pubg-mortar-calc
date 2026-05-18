@@ -1,6 +1,6 @@
 # ballistics.py
 import math
-from config import SCALE_XY, SCALE_Z
+from config import SCALE_Z
 
 def get_mortar_in_game_distance(x, H, mortar_steps):
     """탄도학 공식을 기반으로 인게임 박격포 사거리 배정 값을 계산합니다."""
@@ -15,10 +15,11 @@ def get_mortar_in_game_distance(x, H, mortar_steps):
     closest_in_game_distance = min(mortar_steps, key=lambda curr: abs(curr - exact_distance))
     return closest_in_game_distance
 
-def calculate_physical_distance(p_hx, p_hy, m_hx, m_hy):
-    """두 좌표 간의 SCALE_XY가 적용된 물리적 수평 거리를 계산합니다."""
-    dx_pixels = (m_hx - p_hx) * SCALE_XY
-    dy_pixels = (m_hy - p_hy) * SCALE_XY
+def calculate_physical_distance(p_hx, p_hy, m_hx, m_hy, scale_xy):
+    """두 좌표 간의 지정된 scale_xy가 적용된 물리적 수평 거리를 계산합니다."""
+    # 💡 하드코딩된 변수 대신 매개변수로 받은 scale_xy 사용
+    dx_pixels = (m_hx - p_hx) * scale_xy
+    dy_pixels = (m_hy - p_hy) * scale_xy
     return math.sqrt(dx_pixels**2 + dy_pixels**2)
 
 def get_absolute_height(heightmap, hx, hy):
