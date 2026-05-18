@@ -1,0 +1,4 @@
+PyWin32
+pyttsx3
+keyboard
+opencv-python
