@@ -120,7 +120,6 @@ def run_calculator(test=False):
     # 2. 객체 탐지 수행
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
 
-    player_hex = config.COLOR_LIST[0]
     target_hex = config.COLOR_LIST[current_color_idx]
 
     match_p, match_m = find_markers_simultaneously(
@@ -128,7 +127,6 @@ def run_calculator(test=False):
         tpl_player, 
         tpl_marker, 
         scale_range, 
-        player_hex, 
         target_hex
     )
 
