@@ -3,15 +3,29 @@ import math
 from config import Z_SCALE, Z_REFERENCE_PIXEL
 
 def get_mortar_in_game_distance(x, H, mortar_steps):
-    """탄도학 공식을 기반으로 인게임 박격포 사거리 배정 값을 계산합니다."""
+    """탄도학 공식을 기반으로 인게임 박격포 사거리 배정 값을 계산합니다.
+    사격 불가능 시 원인을 구분하여 반환합니다.
+    """
+    if x == 0:
+        return "INVALID_DISTANCE_ZERO"  # 0으로 나누기 방지
+        
+    # 1. 물리적으로 도달 불가능한 경우 (너무 멀거나 고도가 너무 높음)
     inside_sqrt = 1 - (H / 350) - (pow(x, 2) / pow(700, 2))
     if inside_sqrt < 0:
-        return None
+        return "TOO_FAR"
 
     tan_theta = (700 / x) * (1 + math.sqrt(inside_sqrt))
     theta_deg = (math.atan(tan_theta) * 180) / math.pi
     
     exact_distance = 700 * math.sin(2 * ((90 - theta_deg) * math.pi / 180))
+    
+    # 2. 너무 가까운 경우 판정
+    # 계산된 실제 사거리가 인게임에서 지원하는 가장 짧은 사거리보다도 작다면 구분이 필요합니다.
+    min_game_dist = min(mortar_steps)
+    if exact_distance < min_game_dist:
+        return "TOO_CLOSE"
+        
+    # 3. 정상 범위 내에서 가장 가까운 사거리 단계 매칭
     closest_in_game_distance = min(mortar_steps, key=lambda curr: abs(curr - exact_distance))
     return closest_in_game_distance
 

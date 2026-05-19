@@ -142,9 +142,7 @@ def run_calculator():
 
     # 4. 탄도학 조준값 계산
     final_mortar_dist = get_mortar_in_game_distance(x_dist, h_diff, config.MORTAR_STEPS)
-    global last_calculated_distance
-    last_calculated_distance = final_mortar_dist
-
+    
     # 5. 시각화 및 결과 저장
     result_img = src_img.copy()
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -164,15 +162,36 @@ def run_calculator():
     cv2.putText(result_img, f"Horizontal Dist: {x_dist:.2f}m", (20, 40), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
     cv2.putText(result_img, f"Height Diff (H): {h_diff:.2f}m", (20, 80), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
     
-    if final_mortar_dist:
+    if isinstance(final_mortar_dist, (int, float)):
         cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (20, 120), font, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
         print(f"🎯 [계산 완료] 맵:{current_map.upper()}, 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m (P:{player_z:.1f}m / M:{marker_z:.1f}m) -> 조준:{final_mortar_dist}m")
 
+        global last_calculated_distance
+        last_calculated_distance = final_mortar_dist
+
         speak(f"{final_mortar_dist} meters")
+
+    # 반환된 값이 숫자가 아닌 경우 (사격 불가능 케이스)
     else:
-        cv2.putText(result_img, "🎯 IN-GAME DIST: IMPOSSIBLE", (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
-        print("❌ 발사 불가능 구역입니다.")
-        speak("impossible")
+        # 상황별 화면 텍스트 및 음성 멘트 분기
+        if final_mortar_dist == "TOO_FAR":
+            display_msg = "🎯 DIST: TOO FAR / TOO HIGH"
+            voice_msg = "too far"
+            print("❌ 발사 불가능: 목표가 너무 멀거나 높습니다.")
+            
+        elif final_mortar_dist == "TOO_CLOSE":
+            display_msg = "🎯 DIST: TOO CLOSE"
+            voice_msg = "too close"
+            print("❌ 발사 불가능: 목표가 최소 사거리보다 가깝습니다.")
+            
+        else:  # "INVALID_DISTANCE_ZERO" 등 기타 예외
+            display_msg = "🎯 DIST: INVALID"
+            voice_msg = "impossible"
+            print("❌ 발사 불가능: 잘못된 거리 데이터입니다.")
+
+        # OpenCV 화면 출력 및 음성 출력 (빨간색 글씨)
+        cv2.putText(result_img, display_msg, (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
+        speak(voice_msg)
 
     cv2.imwrite("result.png", result_img)
     print("[완료] 결과가 'result.png'에 업데이트되었습니다.")
