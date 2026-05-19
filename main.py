@@ -13,24 +13,18 @@ from tts import speak
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
 current_map = 'erangel'
-is_selecting_map = False      
-last_calculated_distance = None
+current_color_idx = 0  # 기본값: 0번 (Yellow)
 
-# 🎨 [추가] 마커 색상 관련 변수 및 세팅
-# 1번: 주황, 2번: 핫핑크, 3번: 빨강, 4번: 파랑 (제시해주신 HEX 기준 BGR 범위 설정용)
-COLOR_LIST = ["e9e511", "ff00ff", "ff0000", "0000ff"]
-COLOR_NAMES = ["YELLOW", "PINK", "RED", "BLUE"]
-current_color_idx = 0  # 기본값: 1번 (Orange)
+is_selecting_map = False      
 is_selecting_color = False
 
-# 맵 순서 정의 (1~6번 매핑용)
-MAP_LIST = ['erangel', 'miramar', 'vikendi', 'sanhok', 'karakin', 'jackal']
+last_calculated_distance = None
 
 def start_map_selection():
     """F7 키 입력 시 맵 선택 모드로 진입"""
     global is_selecting_map, is_selecting_color
     is_selecting_map = True
-    is_selecting_color = False # 색상 선택 모드 해제
+    is_selecting_color = False  # 색상 선택 모드 해제
     print("\n==================================================")
     print(" 🗺️ [맵 선택 모드] 숫자 1 ~ 6을 눌러 선택하세요.")
     print(" 1: Erangel  | 2: Miramar | 3: Vikendi")
@@ -38,29 +32,31 @@ def start_map_selection():
     print("==================================================")
     speak("Select map")
 
+
 def select_map_by_number(number):
     """숫자 1~6 입력 시 호출되어 전역 current_map을 변경"""
     global current_map, is_selecting_map
     if is_selecting_map:
         idx = number - 1
-        if 0 <= idx < len(MAP_LIST):
-            current_map = MAP_LIST[idx]
+        if 0 <= idx < len(config.MAP_LIST):
+            current_map = config.MAP_LIST[idx]
             print(f"\n[변경 완료] 🗺️ 현재 타겟 맵이 [ {current_map.upper()} ] (으)로 변경되었습니다.")
             speak(current_map.upper())
             is_selecting_map = False 
 
-# 🎨 [추가] 색상 선택 모드 진입 및 변경 함수
+
 def start_color_selection():
     """F6 키 입력 시 마커 색상 선택 모드로 진입"""
     global is_selecting_color, is_selecting_map
     is_selecting_color = True
-    is_selecting_map = False # 맵 선택 모드 해제
+    is_selecting_map = False  # 맵 선택 모드 해제
     print("\n==================================================")
     print(" 🎨 [마커 색상 선택 모드] 숫자 1 ~ 4를 눌러 선택하세요.")
     print(" 1: Yellow (e9e511) | 2: Pink (ff00ff)")
     print(" 3: Red (ff0000)    | 4: Blue (0000ff)")
     print("==================================================")
     speak("Select color")
+
 
 def select_shortcut_handler(number):
     """숫자 1~6 키가 눌렸을 때 현재 모드(맵 선택 vs 색상 선택)에 따라 분기 처리"""
@@ -70,12 +66,13 @@ def select_shortcut_handler(number):
         select_map_by_number(number)
     elif is_selecting_color:
         idx = number - 1
-        if 0 <= idx < len(COLOR_LIST):
+        if 0 <= idx < len(config.COLOR_LIST):
             current_color_idx = idx
-            selected_name = COLOR_NAMES[idx]
-            print(f"\n[변경 완료] 🎨 타겟 마커 색상이 [ {selected_name} ] (# {COLOR_LIST[idx]}) 로 변경되었습니다.")
+            selected_name = config.COLOR_NAMES[idx]
+            print(f"\n[변경 완료] 🎨 타겟 마커 색상이 [ {selected_name} ] (# {config.COLOR_LIST[idx]}) 로 변경되었습니다.")
             speak(selected_name)
             is_selecting_color = False
+
 
 def replay_last_distance():
     """F9를 누르면 마지막으로 계산된 거리를 다시 브리핑"""
@@ -85,11 +82,12 @@ def replay_last_distance():
     else:
         speak("No")
 
+
 def run_calculator(test=False):
     """F8 키 입력 시 실행될 박격포 연산 메인 로직"""
     global current_map, current_color_idx
     
-    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다... (타겟 색상: {COLOR_NAMES[current_color_idx]})")
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다... (타겟 색상: {config.COLOR_NAMES[current_color_idx]})")
     speak("shot")
 
     # 1. 실시간 이미지 로드
@@ -97,6 +95,7 @@ def run_calculator(test=False):
         src_img = cv2.imread('image/image.png')
     else:
         src_img = capture.get_screenshot()
+        
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
         speak("screen capture error")
@@ -106,7 +105,7 @@ def run_calculator(test=False):
     map_size = h
     start_x = (w - map_size) // 2
 
-    # ❗ 중요: 마커 탐지를 위해 컬러 ROI도 쪼개둡니다.
+    # 마커 탐지를 위해 컬러 ROI 쪼개기
     color_map_roi = src_img[0:h, start_x : start_x + map_size].copy()
     
     # 플레이어 탐지용 흑백 ROI 처리
@@ -115,7 +114,7 @@ def run_calculator(test=False):
     map_roi_cleaned = remove_pubg_grid(map_roi_gray, grid_mode=8)
     
     tpl_player = cv2.imread("image/player.png", 0)
-    tpl_marker = cv2.imread("image/marker.png", cv2.IMREAD_COLOR) # ❗ 마커는 컬러로 로드
+    tpl_marker = cv2.imread("image/marker.png", cv2.IMREAD_COLOR)
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
@@ -125,13 +124,12 @@ def run_calculator(test=False):
     # 2. 객체 탐지 수행
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
     
-    # 플레이어는 기존처럼 흑백 그리드 제거 이미지로 매칭
     match_p = find_marker_multi_scale(map_roi_cleaned, tpl_player, scale_range)
     
-    # ⭐ [수정] 마커는 선택된 색상 정보를 기반으로 전용 함수 호출
-    target_hex = COLOR_LIST[current_color_idx]
+    target_hex = config.COLOR_LIST[current_color_idx]
     match_m = find_color_marker_multi_scale(color_map_roi, tpl_marker, scale_range, target_hex)
 
+    # config의 MATCH_THRESHOLD 사용
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
         print(f"❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (현재 선택 맵: {current_map.upper()})")
         speak("no marker")
@@ -228,22 +226,23 @@ def main(test=False):
         run_calculator(test)
         import sys
         sys.exit(0)
+        
     print("==================================================")
-    print(f" 🎯 배그 박격포 계산기 실시간 모드 작동 중... (모드: {capture.CAPTURE_MODE})")
+    print(f" 🎯 배그 박격포 계산기 실시간 모드 작동 중... (모드: {config.CAPTURE_MODE})")
     print("--------------------------------------------------")
     print(f" 기본 선택된 맵: [ {current_map.upper()} ]")
-    print(f" 기본 선택된 색상: [ {COLOR_NAMES[current_color_idx]} ]")
+    print(f" 기본 선택된 색상: [ {config.COLOR_NAMES[current_color_idx]} ]")
     print(" 🎨 다른 마커 선택하기: [ F6 ] 누른 후 숫자 [ 1 ~ 4 ] 선택")
     print(" 🗺️ 다른 맵 선택하기: [ F7 ] 누른 후 숫자 [ 1 ~ 6 ] 선택")
     print(" 🎯 박격포 고도 계산: 지도를 열고 [ F8 ] 누르기")
     print("==================================================")
 
-    # 💡 숫자 1~6 핫키 등록 핸들러 통합 수정 (맵 선택 / 색상 선택 공용 사용)
+    # 💡 숫자 1~6 핫키 등록 핸들러 통합 수정
     for i in range(1, 7):
         keyboard.add_hotkey(str(i), lambda n=i: select_shortcut_handler(n))
 
     # 핫키 등록
-    keyboard.add_hotkey("F6", start_color_selection) # 🎨 색상 선택 모드 진입 추가
+    keyboard.add_hotkey("F6", start_color_selection)
     keyboard.add_hotkey("F7", start_map_selection)
     keyboard.add_hotkey("F8", run_calculator)
     keyboard.add_hotkey('F9', replay_last_distance)    
