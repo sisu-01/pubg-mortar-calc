@@ -219,6 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-result.png
 image/*
 tmp_audio/*
+mask_src.png
+mask_tpl.png
+result.png

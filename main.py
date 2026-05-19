@@ -114,7 +114,7 @@ def run_calculator(test=False):
     map_roi_cleaned = remove_pubg_grid(map_roi_gray, grid_mode=8)
     
     tpl_player = cv2.imread("image/player.png", 0)
-    tpl_marker = cv2.imread("image/marker.png", cv2.IMREAD_COLOR)
+    tpl_marker = cv2.imread("image/marker.png", cv2.IMREAD_GRAYSCALE)
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")

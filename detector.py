@@ -28,12 +28,11 @@ def find_marker_multi_scale(screenshot_gray, template_gray, scale_range):
     return best_match
 
 
-def find_color_marker_multi_scale(screenshot_color, template_color, scale_range, target_hex):
+def find_color_marker_multi_scale(screenshot_color, template_image, scale_range, target_hex):
     """
     특정 단색 마커만 필터링하여 다중 스케일 템플릿 매칭을 수행합니다.
     변형 및 압축이 없는 깨끗한 이미지이므로 HEX 값의 오차 범위를 아주 좁게 주어 처리합니다.
     """
-    print(template_color, target_hex)
     best_match = None
     
     # 1. HEX 코드를 BGR 값으로 변환
@@ -41,16 +40,19 @@ def find_color_marker_multi_scale(screenshot_color, template_color, scale_range,
     g = int(target_hex[2:4], 16)
     b = int(target_hex[4:6], 16)
     
-    # 2. 압축/빛 번짐이 없으므로 오차 범위를 매우 타이트하게 설정 (±5)
-    lower_bound = np.array([max(0, b-5), max(0, g-5), max(0, r-5)], dtype=np.uint8)
-    upper_bound = np.array([min(255, b+5), min(255, g+5), min(255, r+5)], dtype=np.uint8)
-    
-    # 3. 전체 화면(ROI)에서 원하는 색상 영역만 마스킹 (그 외 영역은 검은색 처리)
+    tol = 0 # tolerance(허용 오차)
+    lower_bound = np.array([max(0, b-tol), max(0, g-tol), max(0, r-tol)], dtype=np.uint8)
+    upper_bound = np.array([min(255, b+tol), min(255, g+tol), min(255, r+tol)], dtype=np.uint8)
+
+    # 3. 마스킹 수행
     mask_src = cv2.inRange(screenshot_color, lower_bound, upper_bound)
-    
     # 4. 템플릿 이미지도 똑같이 해당 색상만 남기도록 흑백 마스크화
-    mask_tpl = cv2.inRange(template_color, lower_bound, upper_bound)
-    template_h, template_w = mask_tpl.shape[:2]
+    # mask_tpl = cv2.inRange(template_color, lower_bound, upper_bound)
+
+    cv2.imwrite("mask_src.png", mask_src)
+    cv2.imwrite("mask_tpl.png", template_image)
+
+    template_h, template_w = template_image.shape[:2]
 
     # 5. 추출된 단색 마스크(흑백 구조)를 기반으로 다중 스케일 템플릿 매칭 진행
     for scale in scale_range:
@@ -60,7 +62,7 @@ def find_color_marker_multi_scale(screenshot_color, template_color, scale_range,
         if w < 10 or h < 10:
             continue
 
-        resized_template = cv2.resize(mask_tpl, (w, h), interpolation=cv2.INTER_AREA)
+        resized_template = cv2.resize(template_image, (w, h), interpolation=cv2.INTER_AREA)
         
         # 스크린샷 마스크 이미지와 템플릿 마스크 이미지를 매칭합니다.
         res = cv2.matchTemplate(mask_src, resized_template, cv2.TM_CCOEFF_NORMED)
