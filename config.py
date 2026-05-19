@@ -11,9 +11,15 @@ CAPTURE_MODE = "GDI"
 MATCH_THRESHOLD = 0.10
 
 # 🎨 마커 색상 설정 (HEX 기준 및 디스플레이 텍스트)
-# 순서대로 1번: Yellow, 2번: Pink, 3번: Red, 4번: Blue
-COLOR_LIST = ["e9e511", "ff00ff", "ff0000", "0000ff"]
-COLOR_NAMES = ["YELLOW", "PINK", "RED", "BLUE"]
+# 0 기본, 1 녹색맹, 2 적색맹, 3 청색맹
+temp = [
+  ["e9e511", "da6226", "3aa0d9", "44b549"],
+  ["fbed21", "db7727", "0062ff", "03f4a4"],
+  ["fbed21", "f47016", "2859e0", "1ac68d"],
+  ["fbed21", "f16448", "4378bb", "00d1cb"],
+]
+COLOR_LIST = temp[2]
+COLOR_NAMES = ["YELLOW", "RED", "BLUE", "GREEN"]
 
 # 🗺️ 지원하는 맵 순서 리스트 (1~6번 매핑용)
 MAP_LIST = ['erangel', 'miramar', 'vikendi', 'sanhok', 'karakin', 'jackal']
