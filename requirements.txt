@@ -2,3 +2,6 @@ PyWin32
 pyttsx3
 keyboard
 opencv-python
+gTTS
+pygame
+pydub

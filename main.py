@@ -8,11 +8,13 @@ from ballistics import get_mortar_in_game_distance, calculate_physical_distance,
 from grid_remover import remove_pubg_grid
 
 # 🌟 [유지보수 향상] 캡처 전용 모듈 추가
-import capture 
+import capture
+from tts import speak  # 💡 tts.py에서 speak 함수를 불러옵니다.
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
 current_map = 'erangel'
 is_selecting_map = False      # F7을 눌러 맵 선택 모드인지 여부를 체크하는 플래그
+last_calculated_distance = None
 
 # 맵 순서 정의 (1~6번 매핑용)
 MAP_LIST = ['erangel', 'miramar', 'vikendi', 'sanhok', 'karakin', 'jackal']
@@ -26,6 +28,7 @@ def start_map_selection():
     print(" 1: Erangel  | 2: Miramar | 3: Vikendi")
     print(" 4: Sanhok   | 5: Karakin | 6: Jackal")
     print("==================================================")
+    speak("Select map")
 
 def select_map_by_number(number):
     """숫자 1~6 입력 시 호출되어 전역 current_map을 변경"""
@@ -38,18 +41,32 @@ def select_map_by_number(number):
             current_map = MAP_LIST[idx]
             print(f"\n[변경 완료] 🗺️ 현재 타겟 맵이 [ {current_map.upper()} ] (으)로 변경되었습니다.")
             print("이제 지도를 켜고 [ F8 ]을 누르면 해당 맵 기준으로 계산합니다.")
+            speak(current_map.upper())
             is_selecting_map = False # 선택이 끝나면 모드 탈출
+
+def replay_last_distance():
+    """F9를 누르면 마지막으로 계산된 거리를 다시 영어로 브리핑"""
+    global last_calculated_distance
+    
+    if last_calculated_distance is not None:
+        # pydub 배속이 걸려있으므로 "350 meters"가 0.5초만에 찰지게 뿜어져 나옵니다.
+        speak(f"{last_calculated_distance} meters")
+    else:
+        # 아직 계산된 거리가 없을 때 F9를 누른 경우 예외 처리
+        speak("No")
 
 def run_calculator():
     """F8 키 입력 시 실행될 박격포 연산 메인 로직"""
     global current_map
     
     print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다...")
+    speak("shot")
 
     # 1. 실시간 이미지 로드 (capture 모듈 호출)
     src_img = capture.get_screenshot()
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
+        speak("screen capture error")
         return
 
     h, w, _ = src_img.shape
@@ -69,6 +86,7 @@ def run_calculator():
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
+        speak("template image error")
         return
 
     # 2. 객체 탐지 수행
@@ -78,6 +96,7 @@ def run_calculator():
 
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
         print(f"❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (현재 선택 맵: {current_map.upper()})")
+        speak("no marker")
         return
 
     # 좌표 변환 로직
@@ -104,6 +123,7 @@ def run_calculator():
     heightmap = cv2.imread(heightmap_path, cv2.IMREAD_UNCHANGED)
     if heightmap is None:
         print(f"[오류] 하이트맵 이미지({heightmap_path})를 로드할 수 없습니다. 파일명을 확인해 주세요.")
+        speak("heightmap error")
         return
         
     hm_h, hm_w = heightmap.shape[:2]
@@ -122,6 +142,8 @@ def run_calculator():
 
     # 4. 탄도학 조준값 계산
     final_mortar_dist = get_mortar_in_game_distance(x_dist, h_diff, config.MORTAR_STEPS)
+    global last_calculated_distance
+    last_calculated_distance = final_mortar_dist
 
     # 5. 시각화 및 결과 저장
     result_img = src_img.copy()
@@ -145,9 +167,12 @@ def run_calculator():
     if final_mortar_dist:
         cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (20, 120), font, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
         print(f"🎯 [계산 완료] 맵:{current_map.upper()}, 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m (P:{player_z:.1f}m / M:{marker_z:.1f}m) -> 조준:{final_mortar_dist}m")
+
+        speak(f"{final_mortar_dist} meters")
     else:
         cv2.putText(result_img, "🎯 IN-GAME DIST: IMPOSSIBLE", (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
         print("❌ 발사 불가능 구역입니다.")
+        speak("impossible")
 
     cv2.imwrite("result.png", result_img)
     print("[완료] 결과가 'result.png'에 업데이트되었습니다.")
@@ -167,15 +192,17 @@ def main():
     print(" 프로그램 종료는 콘솔 창에서 [ Ctrl + C ]를 누르세요.")
     print("==================================================")
 
-    # 💡 1. 맵 선택 변경 인터페이스 단축키 등록
-    keyboard.add_hotkey("F7", start_map_selection)
     
     # 💡 2. 숫자 1~6 입력 이벤트 바인딩 (람다식을 활용해 해당 숫자 매핑)
     for i in range(1, 7):
         keyboard.add_hotkey(str(i), lambda n=i: select_map_by_number(n))
 
+    # 💡 1. 맵 선택 변경 인터페이스 단축키 등록
+    keyboard.add_hotkey("F7", start_map_selection)
     # 3. 실시간 박격포 연산 핫키 등록
     keyboard.add_hotkey("F8", run_calculator)
+    # 💡 [추가] F9 키를 누르면 위 함수가 실행되도록 바인딩
+    keyboard.add_hotkey('F9', replay_last_distance)    
 
     try:
         # 키 입력 대기 무한 루프
