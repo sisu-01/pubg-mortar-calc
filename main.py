@@ -92,7 +92,7 @@ def run_calculator(test=False):
 
     # 1. 실시간 이미지 로드
     if test:
-        src_img = cv2.imread('image/image.png')
+        src_img = cv2.imread('images/image.png')
     else:
         src_img = capture.get_screenshot()
         
@@ -113,8 +113,8 @@ def run_calculator(test=False):
     map_roi_gray = gray_src[0:h, start_x : start_x + map_size].copy()
     map_roi_cleaned = remove_pubg_grid(map_roi_gray, grid_mode=8)
     
-    tpl_player = cv2.imread("image/player.png", 0)
-    tpl_marker = cv2.imread("image/marker.png", cv2.IMREAD_GRAYSCALE)
+    tpl_player = cv2.imread("images/player.png", 0)
+    tpl_marker = cv2.imread("images/templates/marker.png", cv2.IMREAD_GRAYSCALE)
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
@@ -153,7 +153,7 @@ def run_calculator(test=False):
     m_cx = m_roi_cx + start_x
     m_cy = m_roi_cy
     
-    heightmap_path = f"image/heightmap/{current_map}_heightmap.png"
+    heightmap_path = f"images/heightmap/{current_map}_heightmap.png"
     heightmap = cv2.imread(heightmap_path, cv2.IMREAD_UNCHANGED)
     if heightmap is None:
         print(f"[오류] 하이트맵 이미지({heightmap_path})를 로드할 수 없습니다. 파일명을 확인해 주세요.")
