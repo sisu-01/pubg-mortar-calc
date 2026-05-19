@@ -4,26 +4,33 @@ import cv2
 import numpy as np
 import keyboard
 import config
-from detector import find_marker_multi_scale
+from detector import find_marker_multi_scale, find_color_marker_multi_scale
 from ballistics import get_mortar_in_game_distance, calculate_physical_distance, get_absolute_height
 from grid_remover import remove_pubg_grid
 
-# 🌟 [유지보수 향상] 캡처 전용 모듈 추가
 import capture
-from tts import speak  # 💡 tts.py에서 speak 함수를 불러옵니다.
+from tts import speak  
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
 current_map = 'erangel'
-is_selecting_map = False      # F7을 눌러 맵 선택 모드인지 여부를 체크하는 플래그
+is_selecting_map = False      
 last_calculated_distance = None
+
+# 🎨 [추가] 마커 색상 관련 변수 및 세팅
+# 1번: 주황, 2번: 핫핑크, 3번: 빨강, 4번: 파랑 (제시해주신 HEX 기준 BGR 범위 설정용)
+COLOR_LIST = ["e9e511", "ff00ff", "ff0000", "0000ff"]
+COLOR_NAMES = ["YELLOW", "PINK", "RED", "BLUE"]
+current_color_idx = 0  # 기본값: 1번 (Orange)
+is_selecting_color = False
 
 # 맵 순서 정의 (1~6번 매핑용)
 MAP_LIST = ['erangel', 'miramar', 'vikendi', 'sanhok', 'karakin', 'jackal']
 
 def start_map_selection():
     """F7 키 입력 시 맵 선택 모드로 진입"""
-    global is_selecting_map
+    global is_selecting_map, is_selecting_color
     is_selecting_map = True
+    is_selecting_color = False # 색상 선택 모드 해제
     print("\n==================================================")
     print(" 🗺️ [맵 선택 모드] 숫자 1 ~ 6을 눌러 선택하세요.")
     print(" 1: Erangel  | 2: Miramar | 3: Vikendi")
@@ -34,36 +41,58 @@ def start_map_selection():
 def select_map_by_number(number):
     """숫자 1~6 입력 시 호출되어 전역 current_map을 변경"""
     global current_map, is_selecting_map
-    
-    # 맵 선택 모드일 때만 숫자 단축키 작동
     if is_selecting_map:
         idx = number - 1
         if 0 <= idx < len(MAP_LIST):
             current_map = MAP_LIST[idx]
             print(f"\n[변경 완료] 🗺️ 현재 타겟 맵이 [ {current_map.upper()} ] (으)로 변경되었습니다.")
-            print("이제 지도를 켜고 [ F8 ]을 누르면 해당 맵 기준으로 계산합니다.")
             speak(current_map.upper())
-            is_selecting_map = False # 선택이 끝나면 모드 탈출
+            is_selecting_map = False 
+
+# 🎨 [추가] 색상 선택 모드 진입 및 변경 함수
+def start_color_selection():
+    """F6 키 입력 시 마커 색상 선택 모드로 진입"""
+    global is_selecting_color, is_selecting_map
+    is_selecting_color = True
+    is_selecting_map = False # 맵 선택 모드 해제
+    print("\n==================================================")
+    print(" 🎨 [마커 색상 선택 모드] 숫자 1 ~ 4를 눌러 선택하세요.")
+    print(" 1: Yellow (e9e511) | 2: Pink (ff00ff)")
+    print(" 3: Red (ff0000)    | 4: Blue (0000ff)")
+    print("==================================================")
+    speak("Select color")
+
+def select_shortcut_handler(number):
+    """숫자 1~6 키가 눌렸을 때 현재 모드(맵 선택 vs 색상 선택)에 따라 분기 처리"""
+    global is_selecting_map, is_selecting_color, current_color_idx
+    
+    if is_selecting_map:
+        select_map_by_number(number)
+    elif is_selecting_color:
+        idx = number - 1
+        if 0 <= idx < len(COLOR_LIST):
+            current_color_idx = idx
+            selected_name = COLOR_NAMES[idx]
+            print(f"\n[변경 완료] 🎨 타겟 마커 색상이 [ {selected_name} ] (# {COLOR_LIST[idx]}) 로 변경되었습니다.")
+            speak(selected_name)
+            is_selecting_color = False
 
 def replay_last_distance():
-    """F9를 누르면 마지막으로 계산된 거리를 다시 영어로 브리핑"""
+    """F9를 누르면 마지막으로 계산된 거리를 다시 브리핑"""
     global last_calculated_distance
-    
     if last_calculated_distance is not None:
-        # pydub 배속이 걸려있으므로 "350 meters"가 0.5초만에 찰지게 뿜어져 나옵니다.
         speak(f"{last_calculated_distance} meters")
     else:
-        # 아직 계산된 거리가 없을 때 F9를 누른 경우 예외 처리
         speak("No")
 
 def run_calculator(test=False):
     """F8 키 입력 시 실행될 박격포 연산 메인 로직"""
-    global current_map
+    global current_map, current_color_idx
     
-    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다...")
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다... (타겟 색상: {COLOR_NAMES[current_color_idx]})")
     speak("shot")
 
-    # 1. 실시간 이미지 로드 (capture 모듈 호출)
+    # 1. 실시간 이미지 로드
     if test:
         src_img = cv2.imread('image/image.png')
     else:
@@ -77,16 +106,16 @@ def run_calculator(test=False):
     map_size = h
     start_x = (w - map_size) // 2
 
+    # ❗ 중요: 마커 탐지를 위해 컬러 ROI도 쪼개둡니다.
+    color_map_roi = src_img[0:h, start_x : start_x + map_size].copy()
+    
+    # 플레이어 탐지용 흑백 ROI 처리
     gray_src = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
-    
-    # 쪼개진 이미지의 메모리 독립성을 위해 .copy() 사용
-    map_roi = gray_src[0:h, start_x : start_x + map_size].copy()
-    
-    # 격자 필터링 수행 (2, 4, 8)
-    map_roi_cleaned = remove_pubg_grid(map_roi, grid_mode=8)
+    map_roi_gray = gray_src[0:h, start_x : start_x + map_size].copy()
+    map_roi_cleaned = remove_pubg_grid(map_roi_gray, grid_mode=8)
     
     tpl_player = cv2.imread("image/player.png", 0)
-    tpl_marker = cv2.imread("image/marker.png", 0)
+    tpl_marker = cv2.imread("image/marker.png", cv2.IMREAD_COLOR) # ❗ 마커는 컬러로 로드
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
@@ -95,8 +124,13 @@ def run_calculator(test=False):
 
     # 2. 객체 탐지 수행
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
+    
+    # 플레이어는 기존처럼 흑백 그리드 제거 이미지로 매칭
     match_p = find_marker_multi_scale(map_roi_cleaned, tpl_player, scale_range)
-    match_m = find_marker_multi_scale(map_roi_cleaned, tpl_marker, scale_range)
+    
+    # ⭐ [수정] 마커는 선택된 색상 정보를 기반으로 전용 함수 호출
+    target_hex = COLOR_LIST[current_color_idx]
+    match_m = find_color_marker_multi_scale(color_map_roi, tpl_marker, scale_range, target_hex)
 
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
         print(f"❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (현재 선택 맵: {current_map.upper()})")
@@ -118,11 +152,9 @@ def run_calculator(test=False):
 
     p_cx = p_roi_cx + start_x
     p_cy = p_roi_cy
-    
     m_cx = m_roi_cx + start_x
     m_cy = m_roi_cy
     
-    # 💡 하드코딩 구문을 지우고 전역변수 current_map을 사용하도록 연동
     heightmap_path = f"image/heightmap/{current_map}_heightmap.png"
     heightmap = cv2.imread(heightmap_path, cv2.IMREAD_UNCHANGED)
     if heightmap is None:
@@ -138,16 +170,13 @@ def run_calculator(test=False):
 
     scale_xy = config.MAP_SCALES.get(current_map, 0.9765625)
     
-    # 수평 거리 및 고도차 계산
     x_dist = calculate_physical_distance(p_hx, p_hy, m_hx, m_hy, scale_xy)
     player_z = get_absolute_height(heightmap, p_hx, p_hy)
     marker_z = get_absolute_height(heightmap, m_hx, m_hy)
     h_diff = marker_z - player_z
 
-    # 4. 탄도학 조준값 계산
     final_mortar_dist = get_mortar_in_game_distance(x_dist, h_diff, config.MORTAR_STEPS)
     
-    # 5. 시각화 및 결과 저장
     result_img = src_img.copy()
     font = cv2.FONT_HERSHEY_SIMPLEX
     
@@ -172,28 +201,21 @@ def run_calculator(test=False):
 
         global last_calculated_distance
         last_calculated_distance = final_mortar_dist
-
         speak(f"{final_mortar_dist} meters")
-
-    # 반환된 값이 숫자가 아닌 경우 (사격 불가능 케이스)
     else:
-        # 상황별 화면 텍스트 및 음성 멘트 분기
         if final_mortar_dist == "TOO_FAR":
             display_msg = "🎯 DIST: TOO FAR / TOO HIGH"
             voice_msg = "too far"
             print("❌ 발사 불가능: 목표가 너무 멀거나 높습니다.")
-            
         elif final_mortar_dist == "TOO_CLOSE":
             display_msg = "🎯 DIST: TOO CLOSE"
             voice_msg = "too close"
             print("❌ 발사 불가능: 목표가 최소 사거리보다 가깝습니다.")
-            
-        else:  # "INVALID_DISTANCE_ZERO" 등 기타 예외
+        else:
             display_msg = "🎯 DIST: INVALID"
             voice_msg = "impossible"
             print("❌ 발사 불가능: 잘못된 거리 데이터입니다.")
 
-        # OpenCV 화면 출력 및 음성 출력 (빨간색 글씨)
         cv2.putText(result_img, display_msg, (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
         speak(voice_msg)
 
@@ -208,31 +230,25 @@ def main(test=False):
         sys.exit(0)
     print("==================================================")
     print(f" 🎯 배그 박격포 계산기 실시간 모드 작동 중... (모드: {capture.CAPTURE_MODE})")
-    if capture.CAPTURE_MODE == "DXGI":
-        print(" 게임 설정 상관없이 작동합니다 (전체화면 / 테두리없음).")
-    else:
-        print(" 인게임 설정을 [테두리 없음] 또는 [창 모드]로 하세요.")
     print("--------------------------------------------------")
     print(f" 기본 선택된 맵: [ {current_map.upper()} ]")
+    print(f" 기본 선택된 색상: [ {COLOR_NAMES[current_color_idx]} ]")
+    print(" 🎨 다른 마커 선택하기: [ F6 ] 누른 후 숫자 [ 1 ~ 4 ] 선택")
     print(" 🗺️ 다른 맵 선택하기: [ F7 ] 누른 후 숫자 [ 1 ~ 6 ] 선택")
     print(" 🎯 박격포 고도 계산: 지도를 열고 [ F8 ] 누르기")
-    print(" 프로그램 종료는 콘솔 창에서 [ Ctrl + C ]를 누르세요.")
     print("==================================================")
 
-    
-    # 💡 2. 숫자 1~6 입력 이벤트 바인딩 (람다식을 활용해 해당 숫자 매핑)
+    # 💡 숫자 1~6 핫키 등록 핸들러 통합 수정 (맵 선택 / 색상 선택 공용 사용)
     for i in range(1, 7):
-        keyboard.add_hotkey(str(i), lambda n=i: select_map_by_number(n))
+        keyboard.add_hotkey(str(i), lambda n=i: select_shortcut_handler(n))
 
-    # 💡 1. 맵 선택 변경 인터페이스 단축키 등록
+    # 핫키 등록
+    keyboard.add_hotkey("F6", start_color_selection) # 🎨 색상 선택 모드 진입 추가
     keyboard.add_hotkey("F7", start_map_selection)
-    # 3. 실시간 박격포 연산 핫키 등록
     keyboard.add_hotkey("F8", run_calculator)
-    # 💡 [추가] F9 키를 누르면 위 함수가 실행되도록 바인딩
     keyboard.add_hotkey('F9', replay_last_distance)    
 
     try:
-        # 키 입력 대기 무한 루프
         keyboard.wait()
     except KeyboardInterrupt:
         print("\n[종료] 프로그램을 안전하게 종료합니다.")
