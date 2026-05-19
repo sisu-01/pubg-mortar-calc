@@ -46,5 +46,4 @@ def get_absolute_height(heightmap, hx, hy):
         raw_pixel = raw_pixel[0]
     # 💡 과거 검증하신 정밀 공식을 16비트 스케일에 완벽 매핑
     actual_height = ((float(raw_pixel) - Z_REFERENCE_PIXEL) / 65535.0) * 512.0 * Z_SCALE
-    print(raw_pixel, actual_height)
     return actual_height
