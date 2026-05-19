@@ -1,4 +1,3 @@
-# main.py
 import time
 import cv2
 import numpy as np
@@ -11,9 +10,41 @@ from grid_remover import remove_pubg_grid
 # 🌟 [유지보수 향상] 캡처 전용 모듈 추가
 import capture 
 
+# --- 💡 글로벌 변수 선언 및 초기값 설정 ---
+current_map = 'erangel'
+is_selecting_map = False      # F7을 눌러 맵 선택 모드인지 여부를 체크하는 플래그
+
+# 맵 순서 정의 (1~6번 매핑용)
+MAP_LIST = ['erangel', 'miramar', 'vikendi', 'sanhok', 'karakin', 'jackal']
+
+def start_map_selection():
+    """F7 키 입력 시 맵 선택 모드로 진입"""
+    global is_selecting_map
+    is_selecting_map = True
+    print("\n==================================================")
+    print(" 🗺️ [맵 선택 모드] 숫자 1 ~ 6을 눌러 선택하세요.")
+    print(" 1: Erangel  | 2: Miramar | 3: Vikendi")
+    print(" 4: Sanhok   | 5: Karakin | 6: Jackal")
+    print("==================================================")
+
+def select_map_by_number(number):
+    """숫자 1~6 입력 시 호출되어 전역 current_map을 변경"""
+    global current_map, is_selecting_map
+    
+    # 맵 선택 모드일 때만 숫자 단축키 작동
+    if is_selecting_map:
+        idx = number - 1
+        if 0 <= idx < len(MAP_LIST):
+            current_map = MAP_LIST[idx]
+            print(f"\n[변경 완료] 🗺️ 현재 타겟 맵이 [ {current_map.upper()} ] (으)로 변경되었습니다.")
+            print("이제 지도를 켜고 [ F8 ]을 누르면 해당 맵 기준으로 계산합니다.")
+            is_selecting_map = False # 선택이 끝나면 모드 탈출
+
 def run_calculator():
     """F8 키 입력 시 실행될 박격포 연산 메인 로직"""
-    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! 실시간 화면 분석을 시작합니다...")
+    global current_map
+    
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다...")
 
     # 1. 실시간 이미지 로드 (capture 모듈 호출)
     src_img = capture.get_screenshot()
@@ -46,7 +77,7 @@ def run_calculator():
     match_m = find_marker_multi_scale(map_roi_cleaned, tpl_marker, scale_range)
 
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
-        print("❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (지도를 켜둔 상태인지 확인하세요)")
+        print(f"❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (현재 선택 맵: {current_map.upper()})")
         return
 
     # 좌표 변환 로직
@@ -68,12 +99,11 @@ def run_calculator():
     m_cx = m_roi_cx + start_x
     m_cy = m_roi_cy
     
-    current_map = 'jackal'  # 💡 현재 분석 중인 맵 지정
-    
+    # 💡 하드코딩 구문을 지우고 전역변수 current_map을 사용하도록 연동
     heightmap_path = f"image/heightmap/{current_map}_heightmap.png"
     heightmap = cv2.imread(heightmap_path, cv2.IMREAD_UNCHANGED)
     if heightmap is None:
-        print(f"[오류] 하이트맵 이미지({heightmap_path})를 로드할 수 없습니다.")
+        print(f"[오류] 하이트맵 이미지({heightmap_path})를 로드할 수 없습니다. 파일명을 확인해 주세요.")
         return
         
     hm_h, hm_w = heightmap.shape[:2]
@@ -114,7 +144,7 @@ def run_calculator():
     
     if final_mortar_dist:
         cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (20, 120), font, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-        print(f"🎯 [계산 완료] 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m (P:{player_z:.1f}m / M:{marker_z:.1f}m) -> 조준:{final_mortar_dist}m")
+        print(f"🎯 [계산 완료] 맵:{current_map.upper()}, 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m (P:{player_z:.1f}m / M:{marker_z:.1f}m) -> 조준:{final_mortar_dist}m")
     else:
         cv2.putText(result_img, "🎯 IN-GAME DIST: IMPOSSIBLE", (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
         print("❌ 발사 불가능 구역입니다.")
@@ -131,11 +161,20 @@ def main():
     else:
         print(" 인게임 설정을 [테두리 없음] 또는 [창 모드]로 하세요.")
     print("--------------------------------------------------")
-    print(" 인게임에서 지도를 열고 [ F8 ] 키를 누르면 계산을 시작합니다.")
+    print(f" 기본 선택된 맵: [ {current_map.upper()} ]")
+    print(" 🗺️ 다른 맵 선택하기: [ F7 ] 누른 후 숫자 [ 1 ~ 6 ] 선택")
+    print(" 🎯 박격포 고도 계산: 지도를 열고 [ F8 ] 누르기")
     print(" 프로그램 종료는 콘솔 창에서 [ Ctrl + C ]를 누르세요.")
     print("==================================================")
 
-    # F8 키를 누르면 계산기 함수 실행하도록 등록
+    # 💡 1. 맵 선택 변경 인터페이스 단축키 등록
+    keyboard.add_hotkey("F7", start_map_selection)
+    
+    # 💡 2. 숫자 1~6 입력 이벤트 바인딩 (람다식을 활용해 해당 숫자 매핑)
+    for i in range(1, 7):
+        keyboard.add_hotkey(str(i), lambda n=i: select_map_by_number(n))
+
+    # 3. 실시간 박격포 연산 핫키 등록
     keyboard.add_hotkey("F8", run_calculator)
 
     try:
