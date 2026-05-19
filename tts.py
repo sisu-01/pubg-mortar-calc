@@ -3,6 +3,7 @@ import os
 from gtts import gTTS
 import pygame
 from pydub import AudioSegment
+from config import TTS_SPEED_FACTOR
 
 # 오디오 파일 임시 폴더 생성
 if not os.path.exists("tmp_audio"):
@@ -10,10 +11,6 @@ if not os.path.exists("tmp_audio"):
 
 # pygame 오디오 믹서 초기화 (표준 주파수로 안정적으로 세팅)
 pygame.mixer.init()
-
-# 💡 [속도 조절 가이드] 기본값은 1.0입니다. 
-# 1.3이면 1.3배속, 1.5면 1.5배속으로 말합니다. 원하는 속도를 입력하세요!
-SPEED_FACTOR = 1.35  
 
 def _speak_google(text):
     try:
@@ -31,7 +28,7 @@ def _speak_google(text):
             sound = AudioSegment.from_file(orig_path, format="mp3")
             
             # pydub의 speedup 기능을 이용해 음의 왜곡 없이 템포만 조절
-            fast_sound = sound.speedup(playback_speed=SPEED_FACTOR)
+            fast_sound = sound.speedup(playback_speed=TTS_SPEED_FACTOR)
             fast_sound.export(speed_path, format="mp3")
         
         # 💡 연타 대응: 현재 채널 0번에서 소리가 나고 있다면 즉시 강제 정지!
