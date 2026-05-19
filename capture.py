@@ -5,13 +5,7 @@ import numpy as np
 import win32con
 import win32gui
 import win32ui
-
-# ==========================================
-# [설정값] 캡처 모드를 설정하세요.
-# "DXGI" : 전체화면/테두리없음용 (배그 안티치트 우회, 추천)
-# "GDI"  : 창모드/테두리없음용 (win32 API 방식)
-# ==========================================
-CAPTURE_MODE = "GDI"
+from config import CAPTURE_MODE
 
 # DXGI 전역 카메라 객체 초기화 (DXGI 모드일 때만 생성)
 camera = dxcam.create() if CAPTURE_MODE == "DXGI" else None
