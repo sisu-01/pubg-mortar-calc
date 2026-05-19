@@ -17,6 +17,7 @@ MAP_SCALES = {
     'karakin':  0.9765625,
     'jackal':   0.48828125
 }
+Z_SCALE = 0.96
+Z_REFERENCE_PIXEL = 32639.0   # 8비트 '7f7f7f' (127)의 16비트 확장값 (인게임 0m 기준점)
 
-SCALE_Z = 0.96
 MATCH_THRESHOLD = 0.10
