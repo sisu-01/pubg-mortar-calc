@@ -55,7 +55,7 @@ def replay_last_distance():
         # 아직 계산된 거리가 없을 때 F9를 누른 경우 예외 처리
         speak("No")
 
-def run_calculator():
+def run_calculator(test=False):
     """F8 키 입력 시 실행될 박격포 연산 메인 로직"""
     global current_map
     
@@ -63,7 +63,10 @@ def run_calculator():
     speak("shot")
 
     # 1. 실시간 이미지 로드 (capture 모듈 호출)
-    src_img = capture.get_screenshot()
+    if test:
+        src_img = cv2.imread('image/image.png')
+    else:
+        src_img = capture.get_screenshot()
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
         speak("screen capture error")
@@ -197,7 +200,11 @@ def run_calculator():
     print("[완료] 결과가 'result.png'에 업데이트되었습니다.")
 
 
-def main():
+def main(test=False):
+    if test:
+        run_calculator(test)
+        import sys
+        sys.exit(0)
     print("==================================================")
     print(f" 🎯 배그 박격포 계산기 실시간 모드 작동 중... (모드: {capture.CAPTURE_MODE})")
     if capture.CAPTURE_MODE == "DXGI":
@@ -230,4 +237,4 @@ def main():
         print("\n[종료] 프로그램을 안전하게 종료합니다.")
 
 if __name__ == "__main__":
-    main()
+    main(True)
