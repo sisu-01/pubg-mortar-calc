@@ -218,8 +218,8 @@ def run_calculator(test=False):
         cv2.putText(result_img, display_msg, (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
         speak(voice_msg)
 
-    cv2.imwrite("result.png", result_img)
-    print("[완료] 결과가 'result.png'에 업데이트되었습니다.")
+    cv2.imwrite("images/debug/result.png", result_img)
+    print("[완료] 결과가 'images/debug/result.png'에 업데이트되었습니다.")
 
 
 def main(test=False):
@@ -246,7 +246,7 @@ def main(test=False):
     # 핫키 등록
     keyboard.add_hotkey("F6", start_color_selection)
     keyboard.add_hotkey("F7", start_map_selection)
-    keyboard.add_hotkey("F8", run_calculator)
+    keyboard.add_hotkey("F8", run_calculator, args=[test])
     keyboard.add_hotkey('F9', replay_last_distance)    
 
     try:
@@ -255,4 +255,4 @@ def main(test=False):
         print("\n[종료] 프로그램을 안전하게 종료합니다.")
 
 if __name__ == "__main__":
-    main(True)
+    main()
