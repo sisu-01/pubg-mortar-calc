@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import keyboard
 import config
-from detector import find_marker_multi_scale, find_color_marker_multi_scale
+from detector import find_markers_simultaneously
 from ballistics import get_mortar_in_game_distance, calculate_physical_distance, get_absolute_height
 from grid_remover import remove_pubg_grid
 
@@ -12,7 +12,7 @@ import capture
 from tts import speak  
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
-current_map = 'erangel'
+current_map = 'jackal'
 current_color_idx = 0  # 기본값: 0번 (Yellow)
 
 is_selecting_map = False      
@@ -107,13 +107,9 @@ def run_calculator(test=False):
 
     # 마커 탐지를 위해 컬러 ROI 쪼개기
     color_map_roi = src_img[0:h, start_x : start_x + map_size].copy()
+    color_map_cleaned = remove_pubg_grid(color_map_roi, grid_mode=8)
     
-    # 플레이어 탐지용 흑백 ROI 처리
-    gray_src = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
-    map_roi_gray = gray_src[0:h, start_x : start_x + map_size].copy()
-    map_roi_cleaned = remove_pubg_grid(map_roi_gray, grid_mode=8)
-    
-    tpl_player = cv2.imread("images/player.png", 0)
+    tpl_player = cv2.imread("images/templates/player.png", cv2.IMREAD_GRAYSCALE)
     tpl_marker = cv2.imread("images/templates/marker.png", cv2.IMREAD_GRAYSCALE)
 
     if tpl_player is None or tpl_marker is None:
@@ -123,11 +119,18 @@ def run_calculator(test=False):
 
     # 2. 객체 탐지 수행
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
-    
-    match_p = find_marker_multi_scale(map_roi_cleaned, tpl_player, scale_range)
-    
+
+    player_hex = config.COLOR_LIST[0]
     target_hex = config.COLOR_LIST[current_color_idx]
-    match_m = find_color_marker_multi_scale(color_map_roi, tpl_marker, scale_range, target_hex)
+
+    match_p, match_m = find_markers_simultaneously(
+        color_map_cleaned, 
+        tpl_player, 
+        tpl_marker, 
+        scale_range, 
+        player_hex, 
+        target_hex
+    )
 
     # config의 MATCH_THRESHOLD 사용
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):

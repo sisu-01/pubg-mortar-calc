@@ -2,78 +2,93 @@
 import cv2
 import numpy as np
 
-def find_marker_multi_scale(screenshot_gray, template_gray, scale_range):
-    """기존 플레이어 탐지용 다중 스케일 템플릿 매칭 (흑백)"""
-    best_match = None
-    template_h, template_w = template_gray.shape[:2]
-
-    for scale in scale_range:
-        w = int(template_w * scale)
-        h = int(template_h * scale)
-
-        if w < 10 or h < 10:
-            continue
-
-        resized_template = cv2.resize(template_gray, (w, h), interpolation=cv2.INTER_AREA)
-        res = cv2.matchTemplate(screenshot_gray, resized_template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(res)
-
-        if best_match is None or max_val > best_match["max_val"]:
-            best_match = {
-                "max_val": max_val,
-                "max_loc": max_loc,
-                "w": w,
-                "h": h,
-            }
-    return best_match
-
-
-def find_color_marker_multi_scale(screenshot_color, template_image, scale_range, target_hex):
+def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_range, player_hex, marker_hex):
     """
-    특정 단색 마커만 필터링하여 다중 스케일 템플릿 매칭을 수행합니다.
-    변형 및 압축이 없는 깨끗한 이미지이므로 HEX 값의 오차 범위를 아주 좁게 주어 처리합니다.
+    마스크 추출 및 외곽선 탐지를 최초 1회만 수행하고,
+    루프를 돌며 플레이어와 마커를 동시에 찾아 연산량을 절반으로 줄입니다.
     """
-    best_match = None
-    
-    # 1. HEX 코드를 BGR 값으로 변환
-    r = int(target_hex[0:2], 16)
-    g = int(target_hex[2:4], 16)
-    b = int(target_hex[4:6], 16)
-    
-    tol = 0 # tolerance(허용 오차)
-    lower_bound = np.array([max(0, b-tol), max(0, g-tol), max(0, r-tol)], dtype=np.uint8)
-    upper_bound = np.array([min(255, b+tol), min(255, g+tol), min(255, r+tol)], dtype=np.uint8)
+    best_player = None
+    best_marker = None
 
-    # 3. 마스킹 수행
-    mask_src = cv2.inRange(screenshot_color, lower_bound, upper_bound)
-    # 4. 템플릿 이미지도 똑같이 해당 색상만 남기도록 흑백 마스크화
-    # mask_tpl = cv2.inRange(template_color, lower_bound, upper_bound)
+    # 1. 두 타겟 색상에 대한 개별 마스크 생성
+    # (플레이어와 마커 색상이 다를 수 있으므로 마스킹은 각각 하되, 전체 화면 기준 1번씩만 수행)
+    def get_mask(hex_str):
+        r, g, b = int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
+        tol = 50
+        lower = np.array([max(0, b-tol), max(0, g-tol), max(0, r-tol)], dtype=np.uint8)
+        upper = np.array([min(255, b+tol), min(255, g+tol), min(255, r+tol)], dtype=np.uint8)
+        return cv2.inRange(screenshot_color, lower, upper)
 
-    cv2.imwrite("mask_src.png", mask_src)
-    cv2.imwrite("mask_tpl.png", template_image)
+    mask_p_src = get_mask(player_hex)
+    mask_m_src = get_mask(marker_hex)
 
-    template_h, template_w = template_image.shape[:2]
+    # 2. 템플릿 비율 미리 계산
+    p_h, p_w = tpl_player.shape[:2]
+    m_h, m_w = tpl_marker.shape[:2]
 
-    # 5. 추출된 단색 마스크(흑백 구조)를 기반으로 다중 스케일 템플릿 매칭 진행
-    for scale in scale_range:
-        w = int(template_w * scale)
-        h = int(template_h * scale)
-
-        if w < 10 or h < 10:
-            continue
-
-        resized_template = cv2.resize(template_image, (w, h), interpolation=cv2.INTER_AREA)
+    # ---------------------------------------------------------
+    # PART A: 플레이어 탐색 (Player 마스크 기반)
+    # ---------------------------------------------------------
+    contours_p, _ = cv2.findContours(mask_p_src, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours_p:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w < 10 or h < 10: continue
         
-        # 스크린샷 마스크 이미지와 템플릿 마스크 이미지를 매칭합니다.
-        res = cv2.matchTemplate(mask_src, resized_template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        # 가로세로 비율 검증 (플레이어는 1:1 근처여야 함)
+        if w / h <= 0.88: 
+            continue  # 세로로 긴 형태(마커)는 플레이어가 아니므로 패스
 
-        if best_match is None or max_val > best_match["max_val"]:
-            best_match = {
-                "max_val": max_val,
-                "max_loc": max_loc,
-                "w": w,
-                "h": h,
-            }
-            
-    return best_match
+        # 합격한 덩어리 구역 매칭
+        roi_y1, roi_y2 = max(0, y - 5), min(mask_p_src.shape[0], y + h + 5)
+        roi_x1, roi_x2 = max(0, x - 5), min(mask_p_src.shape[1], x + w + 5)
+        roi_src = mask_p_src[roi_y1:roi_y2, roi_x1:roi_x2]
+
+        for scale in scale_range:
+            tw, th = int(p_w * scale), int(p_h * scale)
+            if tw < 10 or th < 10 or tw > roi_src.shape[1] or th > roi_src.shape[0]: continue
+
+            resized_tpl = cv2.resize(tpl_player, (tw, th), interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(roi_src, resized_tpl, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if best_player is None or max_val > best_player["max_val"]:
+                best_player = {
+                    "max_val": max_val,
+                    "max_loc": (roi_x1 + max_loc[0], roi_y1 + max_loc[1]),
+                    "w": tw, "h": th
+                }
+
+    # ---------------------------------------------------------
+    # PART B: 마커 탐색 (Marker 마스크 기반)
+    # ---------------------------------------------------------
+    contours_m, _ = cv2.findContours(mask_m_src, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours_m:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w < 10 or h < 10: continue
+        
+        # 가로세로 비율 검증 (마커는 세로로 길어야 함)
+        if w / h > 0.88: 
+            continue  # 1:1에 가까운 형태(플레이어)는 마커가 아니므로 패스
+
+        # 합격한 덩어리 구역 매칭
+        roi_y1, roi_y2 = max(0, y - 5), min(mask_m_src.shape[0], y + h + 5)
+        roi_x1, roi_x2 = max(0, x - 5), min(mask_m_src.shape[1], x + w + 5)
+        roi_src = mask_m_src[roi_y1:roi_y2, roi_x1:roi_x2]
+
+        for scale in scale_range:
+            tw, th = int(m_w * scale), int(m_h * scale)
+            if tw < 10 or th < 10 or tw > roi_src.shape[1] or th > roi_src.shape[0]: continue
+
+            resized_tpl = cv2.resize(tpl_marker, (tw, th), interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(roi_src, resized_tpl, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if best_marker is None or max_val > best_marker["max_val"]:
+                best_marker = {
+                    "max_val": max_val,
+                    "max_loc": (roi_x1 + max_loc[0], roi_y1 + max_loc[1]),
+                    "w": tw, "h": th
+                }
+
+    # 두 결과를 튜플 형태로 동시에 반환합니다.
+    return best_player, best_marker
