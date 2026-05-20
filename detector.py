@@ -21,6 +21,8 @@ def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_
 
     # 2. 공통 색상 마스크 생성 (딱 1번만 연산)
     mask_src = cv2.inRange(screenshot_color, lower_bound, upper_bound)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    mask_src = cv2.morphologyEx(mask_src, cv2.MORPH_CLOSE, kernel)
     cv2.imwrite("images/debug/mask_src.png", mask_src)
 
     # 3. 템플릿 정보 로드
