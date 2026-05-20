@@ -1,6 +1,7 @@
 # detector.py
 import cv2
 import numpy as np
+from config import TOL
 
 def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_range, target_hex):
     """
@@ -15,9 +16,8 @@ def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_
     g = int(target_hex[2:4], 16)
     b = int(target_hex[4:6], 16)
     
-    tol = 50 
-    lower_bound = np.array([max(0, b-tol), max(0, g-tol), max(0, r-tol)], dtype=np.uint8)
-    upper_bound = np.array([min(255, b+tol), min(255, g+tol), min(255, r+tol)], dtype=np.uint8)
+    lower_bound = np.array([max(0, b-TOL), max(0, g-TOL), max(0, r-TOL)], dtype=np.uint8)
+    upper_bound = np.array([min(255, b+TOL), min(255, g+TOL), min(255, r+TOL)], dtype=np.uint8)
 
     # 2. 공통 색상 마스크 생성 (딱 1번만 연산)
     mask_src = cv2.inRange(screenshot_color, lower_bound, upper_bound)
