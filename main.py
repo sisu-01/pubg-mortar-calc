@@ -215,10 +215,10 @@ def run_minimap_calculator(test=False):
     # 2. 제공된 해상도 비율 기반 미니맵 크롭 라이브 연산
     height, width, _ = src_img.shape
     
-    margin_right_ratio = 31 / 1920
-    margin_bottom_ratio = 28 / 1080
-    minimap_width_ratio = 461 / 1920
-    minimap_height_ratio = 461 / 1080
+    margin_right_ratio = 33 / 1920
+    margin_bottom_ratio = 30 / 1080
+    minimap_width_ratio = 457 / 1920
+    minimap_height_ratio = 457 / 1080
     
     current_margin_right = int(round(width * margin_right_ratio))
     current_margin_bottom = int(round(height * margin_bottom_ratio))
