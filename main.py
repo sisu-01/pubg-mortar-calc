@@ -1,4 +1,3 @@
-# main.py
 import time
 import cv2
 import numpy as np
@@ -12,7 +11,7 @@ import capture
 from tts import speak  
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
-current_map = 'jackal'
+current_map = 'erangel'
 current_color_idx = 0  # 기본값: 0번 (Yellow)
 
 is_selecting_map = False      
@@ -75,7 +74,7 @@ def select_shortcut_handler(number):
 
 
 def replay_last_distance():
-    """F9를 누르면 마지막으로 계산된 거리를 다시 브리핑"""
+    """F10를 누르면 마지막으로 계산된 거리를 다시 브리핑"""
     global last_calculated_distance
     if last_calculated_distance is not None:
         speak(f"{last_calculated_distance} meters")
@@ -84,10 +83,10 @@ def replay_last_distance():
 
 
 def run_calculator(test=False):
-    """F8 키 입력 시 실행될 박격포 연산 메인 로직"""
+    """F8 키 입력 시 실행될 박격포 연산 메인 로직 (전체화면 대형 지도 모드)"""
     global current_map, current_color_idx
     
-    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 화면 분석을 시작합니다... (타겟 색상: {config.COLOR_NAMES[current_color_idx]})")
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 전체 지도 분석을 시작합니다... (타겟 색상: {config.COLOR_NAMES[current_color_idx]})")
     speak("shot")
 
     # 1. 실시간 이미지 로드
@@ -119,7 +118,6 @@ def run_calculator(test=False):
 
     # 2. 객체 탐지 수행
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
-
     target_hex = config.COLOR_LIST[current_color_idx]
 
     match_p, match_m = find_markers_simultaneously(
@@ -130,7 +128,6 @@ def run_calculator(test=False):
         target_hex
     )
 
-    # config의 MATCH_THRESHOLD 사용
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
         print(f"❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (현재 선택 맵: {current_map.upper()})")
         speak("no marker")
@@ -194,27 +191,146 @@ def run_calculator(test=False):
     cv2.putText(result_img, f"Horizontal Dist: {x_dist:.2f}m", (20, 40), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
     cv2.putText(result_img, f"Height Diff (H): {h_diff:.2f}m", (20, 80), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
     
-    if isinstance(final_mortar_dist, (int, float)):
-        cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (20, 120), font, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-        print(f"🎯 [계산 완료] 맵:{current_map.upper()}, 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m (P:{player_z:.1f}m / M:{marker_z:.1f}m) -> 조준:{final_mortar_dist}m")
+    process_result_output(final_mortar_dist, x_dist, h_diff, player_z, marker_z, result_img, font)
 
-        global last_calculated_distance
+
+def run_minimap_calculator(test=False):
+    """✨ [새로운 기능] F9 키 입력 시 실행될 우측 하단 미니맵 연산 로직 (고도차 0m 고정)"""
+    global current_color_idx, last_calculated_distance
+    
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🧭 F9 감지! 우측 하단 [ 미니맵 ] 분석을 시작합니다... (타겟 색상: {config.COLOR_NAMES[current_color_idx]})")
+    speak("shot")
+
+    # 1. 이미지 로드
+    if test:
+        src_img = cv2.imread('images/screenshot.png')
+    else:
+        src_img = capture.get_screenshot()
+        
+    if src_img is None:
+        print("[오류] 화면을 캡처하지 못했습니다.")
+        speak("screen capture error")
+        return
+
+    # 2. 제공된 해상도 비율 기반 미니맵 크롭 라이브 연산
+    height, width, _ = src_img.shape
+    
+    margin_right_ratio = 31 / 1920
+    margin_bottom_ratio = 28 / 1080
+    minimap_width_ratio = 461 / 1920
+    minimap_height_ratio = 461 / 1080
+    
+    current_margin_right = int(round(width * margin_right_ratio))
+    current_margin_bottom = int(round(height * margin_bottom_ratio))
+    current_minimap_width = int(round(width * minimap_width_ratio))
+    current_minimap_height = int(round(height * minimap_height_ratio))
+    
+    x_end = width - current_margin_right
+    x_start = x_end - current_minimap_width
+    y_end = height - current_margin_bottom
+    y_start = y_end - current_minimap_height
+    
+    # 우측 하단 미니맵 자르기
+    minimap_roi = src_img[y_start:y_end, x_start:x_end].copy()
+    
+    # 3. 템플릿 로드 및 탐지 수행
+    tpl_player = cv2.imread("images/templates/player.png", cv2.IMREAD_GRAYSCALE)
+    tpl_marker = cv2.imread("images/templates/marker.png", cv2.IMREAD_GRAYSCALE)
+
+    if tpl_player is None or tpl_marker is None:
+        print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
+        speak("template image error")
+        return
+
+    scale_range = np.linspace(0.1, 1.0, 45)[::-1]
+    target_hex = config.COLOR_LIST[current_color_idx]
+
+    # 미니맵 내부에서 탐지 수행
+    match_p, match_m = find_markers_simultaneously(
+        minimap_roi, 
+        tpl_player, 
+        tpl_marker, 
+        scale_range, 
+        target_hex
+    )
+
+    if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
+        print("❌ 미니맵에서 플레이어 또는 마커를 찾을 수 없습니다.")
+        speak("no marker")
+        return
+
+    # 4. 미니맵 내 중심 좌표 계산
+    p_top_left = match_p["max_loc"]
+    m_top_left = match_m["max_loc"]
+
+    p_cx = p_top_left[0] + (match_p["w"] // 2)
+    p_cy = p_top_left[1] + (match_p["h"] // 2)
+    
+    m_cx = m_top_left[0] + (match_m["w"] // 2)
+    m_cy = m_top_left[1] + match_m["h"]
+
+    # 5. 피타고라스 식을 이용한 픽셀 거리 계산
+    pixel_dist = np.sqrt((m_cx - p_cx) ** 2 + (m_cy - p_cy) ** 2)
+    
+    # 💡 핵심 공식 적용: "미니맵 가로 길이 / 7 = 인게임 100m" -> 1픽셀당 미터 = 700 / 미니맵 가로픽셀
+    minimap_size = minimap_roi.shape[1]  # 가로 픽셀 크기
+    x_dist = pixel_dist * (700.0 / minimap_size)
+    h_diff = 0.0  # 미니맵 모드는 고도차가 무조건 0m 동일
+
+    # 탄도학 테이블 매칭 (H=0 대입)
+    final_mortar_dist = get_mortar_in_game_distance(x_dist, h_diff, config.MORTAR_STEPS)
+
+    # 6. 미니맵용 디버그 결과 이미지 시각화 생성
+    result_img = minimap_roi.copy()
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    cv2.circle(result_img, (p_cx, p_cy), 6, (0, 0, 255), -1) 
+    cv2.circle(result_img, (m_cx, m_cy), 6, (0, 0, 255), -1) 
+    cv2.line(result_img, (p_cx, p_cy), (m_cx, m_cy), (0, 255, 255), 2)
+
+    # 고도가 동일하므로 상단 텍스트 박스만 노출
+    cv2.rectangle(result_img, (5, 5), (320, 65), (0, 0, 0), -1)
+    cv2.putText(result_img, f"Minimap Dist: {x_dist:.2f}m", (10, 25), font, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+
+    if isinstance(final_mortar_dist, (int, float)):
+        cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (10, 50), font, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+        print(f"🎯 [미니맵 계산 완료] 수평(고도동일):{x_dist:.1f}m -> 조준:{final_mortar_dist}m")
         last_calculated_distance = final_mortar_dist
         speak(f"{final_mortar_dist} meters")
     else:
+        display_msg, voice_msg = handle_error_messages(final_mortar_dist)
+        cv2.putText(result_img, display_msg, (10, 50), font, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
+        speak(voice_msg)
+
+    cv2.imwrite("images/debug/result.png", result_img)
+    print("[완료] 미니맵 결과가 'images/debug/result.png'에 업데이트되었습니다.")
+
+
+def handle_error_messages(final_mortar_dist):
+    """사거리 예외 결과에 따른 스트링 메시지 변환 처리"""
+    if final_mortar_dist == "TOO_FAR":
+        print("❌ 발사 불가능: 목표가 너무 멀거나 높습니다.")
+        return "🎯 DIST: TOO FAR", "too far"
+    elif final_mortar_dist == "TOO_CLOSE":
+        print("❌ 발사 불가능: 목표가 최소 사거리보다 가깝습니다.")
+        return "🎯 DIST: TOO CLOSE", "too close"
+    else:
+        print("❌ 발사 불가능: 잘못된 거리 데이터입니다.")
+        return "🎯 DIST: INVALID", "impossible"
+
+
+def process_result_output(final_mortar_dist, x_dist, h_diff, player_z, marker_z, result_img, font):
+    """기존 F8 모드의 텍스트 드로잉 및 출력 연동 로직 분리"""
+    global last_calculated_distance
+    if isinstance(final_mortar_dist, (int, float)):
+        cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (20, 120), font, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+        print(f"🎯 [계산 완료] 맵:{current_map.upper()}, 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m (P:{player_z:.1f}m / M:{marker_z:.1f}m) -> 조준:{final_mortar_dist}m")
+        last_calculated_distance = final_mortar_dist
+        speak(f"{final_mortar_dist} meters")
+    else:
+        display_msg, voice_msg = handle_error_messages(final_mortar_dist)
         if final_mortar_dist == "TOO_FAR":
             display_msg = "🎯 DIST: TOO FAR / TOO HIGH"
-            voice_msg = "too far"
-            print("❌ 발사 불가능: 목표가 너무 멀거나 높습니다.")
-        elif final_mortar_dist == "TOO_CLOSE":
-            display_msg = "🎯 DIST: TOO CLOSE"
-            voice_msg = "too close"
-            print("❌ 발사 불가능: 목표가 최소 사거리보다 가깝습니다.")
-        else:
-            display_msg = "🎯 DIST: INVALID"
-            voice_msg = "impossible"
-            print("❌ 발사 불가능: 잘못된 거리 데이터입니다.")
-
         cv2.putText(result_img, display_msg, (20, 120), font, 0.8, (0, 0, 255), 2, cv2.LINE_AA)
         speak(voice_msg)
 
@@ -224,22 +340,25 @@ def run_calculator(test=False):
 
 def main(test=False):
     if test:
-        run_calculator(test)
+        # 테스트 모드 작동 시 F9 미니맵 모드로 시뮬레이션 하려면 함수명을 run_minimap_calculator(test)로 변경하세요.
+        # run_calculator()
+        run_minimap_calculator(test)
         import sys
         sys.exit(0)
         
     print("==================================================")
-    print(f" 🎯 배그 박격포 계산기 실시간 모드 작동 중... (모드: {config.CAPTURE_MODE})")
+    print(f" 🎯 배그 박격포 계산기 실시간 멀티 모드 작동 중... (모드: {config.CAPTURE_MODE})")
     print("--------------------------------------------------")
-    print(f" 기본 선택된 맵: [ {current_map.upper()} ]")
+    print(f" 기본 선택된 맵: [ {current_map.upper()} ] (F8 대형 지도용)")
     print(f" 기본 선택된 색상: [ {config.COLOR_NAMES[current_color_idx]} ]")
     print(" 🎨 다른 마커 선택하기: [ F6 ] 누른 후 숫자 [ 1 ~ 4 ] 선택")
     print(" 🗺️ 다른 맵 선택하기: [ F7 ] 누른 후 숫자 [ 1 ~ 6 ] 선택")
-    print(" 🎯 박격포 고도 계산: 지도를 열고 [ F8 ] 누르기")
-    print(" 👂 박격포 거리 다시 듣기는 [ F9 ] 누르기")
+    print(" 🎯 박격포 고도 계산1: 전체 지도를 열고 [ F8 ] 누르기")
+    print(" 🧭 박격포 평지 계산2: 화면 우측 하단 미니맵 상태에서 [ F9 ] 누르기")
+    print(" 👂 박격포 거리 다시 듣기는 [ F10 ] 누르기")
     print("==================================================")
 
-    # 💡 숫자 1~6 핫키 등록 핸들러 통합 수정
+    # 숫자 1~6 핫키 등록 핸들러
     for i in range(1, 7):
         keyboard.add_hotkey(str(i), lambda n=i: select_shortcut_handler(n))
 
@@ -247,7 +366,8 @@ def main(test=False):
     keyboard.add_hotkey("F6", start_color_selection)
     keyboard.add_hotkey("F7", start_map_selection)
     keyboard.add_hotkey("F8", run_calculator, args=[test])
-    keyboard.add_hotkey('F9', replay_last_distance)    
+    keyboard.add_hotkey("F9", run_minimap_calculator, args=[test])  # ✨ F9 핫키 매핑 추가
+    keyboard.add_hotkey('F10', replay_last_distance)    
 
     try:
         keyboard.wait()
@@ -255,4 +375,5 @@ def main(test=False):
         print("\n[종료] 프로그램을 안전하게 종료합니다.")
 
 if __name__ == "__main__":
+    # True 상태일 때는 소스 폴더에 'images/screenshot.png'가 있어야 정상 테스트됩니다.
     main()
