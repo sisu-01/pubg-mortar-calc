@@ -21,9 +21,17 @@ def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_
 
     # 2. 공통 색상 마스크 생성 (딱 1번만 연산)
     mask_src = cv2.inRange(screenshot_color, lower_bound, upper_bound)
+    cv2.imwrite("images/debug/1_no_morph_mask_src.png", mask_src)
+    # 타원형 커널 정의 (원형/물방울 마커용 추천)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    mask_src = cv2.morphologyEx(mask_src, cv2.MORPH_CLOSE, kernel)
-    cv2.imwrite("images/debug/mask_src.png", mask_src)
+    # 2. [늘리기 단계] 팽창(Dilation) 연산 수행 및 저장
+    # 주변의 빈틈이나 구멍을 메우기 위해 흰색 영역이 확장된 상태입니다.
+    mask_dilated = cv2.dilate(mask_src, kernel, iterations=1)
+    cv2.imwrite("images/debug/2_dilated_mask_src.png", mask_dilated)
+    # 3. [줄이기 단계] 침식(Erosion) 연산 수행 및 저장 (최종 결과물)
+    # 늘어난 외곽선을 다시 원상복구하여 형태를 다듬은 상태입니다.
+    mask_src = cv2.erode(mask_dilated, kernel, iterations=1)
+    cv2.imwrite("images/debug/3_yes_morph_mask_src.png", mask_src)
 
     # 3. 템플릿 정보 로드
     p_h, p_w = tpl_player.shape[:2]
