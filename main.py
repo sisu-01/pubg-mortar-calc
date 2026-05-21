@@ -1,3 +1,4 @@
+import math
 import time
 import cv2
 import numpy as np
@@ -11,7 +12,7 @@ import capture
 from tts import speak  
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
-current_map = 'erangel'
+current_map = 'jackal'
 current_color_idx = 0  # 기본값: 0번 (Yellow)
 
 is_selecting_map = False      
@@ -195,13 +196,13 @@ def run_calculator(test=False):
 
 
 def run_minimap_calculator(test=False):
-    """✨ [새로운 기능] F9 키 입력 시 실행될 우측 하단 미니맵 연산 로직 (고도차 0m 고정)"""
+    """✨ [업그레이드] F9 키 입력 시 미니맵 수평거리 + 인게임 화면 Y축 분석을 통한 고도차 결합 연산"""
     global current_color_idx, last_calculated_distance
     
-    print(f"\n[{time.strftime('%H:%M:%S')}] 🧭 F9 감지! 우측 하단 [ 미니맵 ] 분석을 시작합니다... (타겟 색상: {config.COLOR_NAMES[current_color_idx]})")
+    print(f"\n[{time.strftime('%H:%M:%S')}] 🧭 F9 감지! 미니맵 거리 및 화면 중앙 Y축 고도차 연산을 시작합니다...")
     speak("shot")
 
-    # 1. 이미지 로드
+    # 1. 원본 전체 화면 이미지 로드
     if test:
         src_img = cv2.imread('images/screenshot.png')
     else:
@@ -212,9 +213,11 @@ def run_minimap_calculator(test=False):
         speak("screen capture error")
         return
 
-    # 2. 제공된 해상도 비율 기반 미니맵 크롭 라이브 연산
-    height, width, _ = src_img.shape
+    height, width, _ = src_img.shape  # 기준: 1920 x 1080
     
+    # -----------------------------------------------------------------
+    # [파트 A] 기존 미니맵 기반 수평 거리(x_dist) 계산 로직 (유지)
+    # -----------------------------------------------------------------
     margin_right_ratio = 33 / 1920
     margin_bottom_ratio = 30 / 1080
     minimap_width_ratio = 457 / 1920
@@ -230,80 +233,122 @@ def run_minimap_calculator(test=False):
     y_end = height - current_margin_bottom
     y_start = y_end - current_minimap_height
     
-    # 우측 하단 미니맵 자르기
     minimap_roi = src_img[y_start:y_end, x_start:x_end].copy()
     
-    # 3. 템플릿 로드 및 탐지 수행
     tpl_player = cv2.imread("images/templates/player.png", cv2.IMREAD_GRAYSCALE)
     tpl_marker = cv2.imread("images/templates/marker.png", cv2.IMREAD_GRAYSCALE)
 
     if tpl_player is None or tpl_marker is None:
-        print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
+        print("[오류] 템플릿 이미지를 확인하세요.")
         speak("template image error")
         return
 
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
     target_hex = config.COLOR_LIST[current_color_idx]
 
-    # 미니맵 내부에서 탐지 수행
-    match_p, match_m = find_markers_simultaneously(
-        minimap_roi, 
-        tpl_player, 
-        tpl_marker, 
-        scale_range, 
-        target_hex
+    # 미니맵 내 마커/플레이어 탐지
+    match_p, match_m_mini = find_markers_simultaneously(
+        minimap_roi, tpl_player, tpl_marker, scale_range, target_hex
     )
 
-    if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
+    if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m_mini and match_m_mini["max_val"] >= config.MATCH_THRESHOLD):
         print("❌ 미니맵에서 플레이어 또는 마커를 찾을 수 없습니다.")
         speak("no marker")
         return
 
-    # 4. 미니맵 내 중심 좌표 계산
-    p_top_left = match_p["max_loc"]
-    m_top_left = match_m["max_loc"]
+    p_cx = match_p["max_loc"][0] + (match_p["w"] // 2)
+    p_cy = match_p["max_loc"][1] + (match_p["h"] // 2)
+    m_cx_mini = match_m_mini["max_loc"][0] + (match_m_mini["w"] // 2)
+    m_cy_mini = match_m_mini["max_loc"][1] + match_m_mini["h"]
 
-    p_cx = p_top_left[0] + (match_p["w"] // 2)
-    p_cy = p_top_left[1] + (match_p["h"] // 2)
+    pixel_dist = np.sqrt((m_cx_mini - p_cx) ** 2 + (m_cy_mini - p_cy) ** 2)
+    minimap_size = minimap_roi.shape[1]
+    x_dist = pixel_dist * (700.0 / minimap_size)  # 수평 거리 (D)
+
+# -----------------------------------------------------------------
+    # [파트 B] 삼각함수 공식 기반 고도차(h_diff) 정밀 연산 (상단 나침반 UI 예외 처리)
+    # -----------------------------------------------------------------
+    # 상단 나침반 UI 제거 (Y: 100부터 끝까지)
+    center_roi_y1 = 100
+    center_roi_y2 = height  # 1080
     
-    m_cx = m_top_left[0] + (match_m["w"] // 2)
-    m_cy = m_top_left[1] + match_m["h"]
-
-    # 5. 피타고라스 식을 이용한 픽셀 거리 계산
-    pixel_dist = np.sqrt((m_cx - p_cx) ** 2 + (m_cy - p_cy) ** 2)
+    # 화면 중앙부 가로 영역 (X: 960 기준 좌우 100px -> 860 ~ 1060)
+    center_roi_x1 = (width // 2) - 30
+    center_roi_x2 = (width // 2) + 30
     
-    # 💡 핵심 공식 적용: "미니맵 가로 길이 / 7 = 인게임 100m" -> 1픽셀당 미터 = 700 / 미니맵 가로픽셀
-    minimap_size = minimap_roi.shape[1]  # 가로 픽셀 크기
-    x_dist = pixel_dist * (700.0 / minimap_size)
-    h_diff = 0.0  # 미니맵 모드는 고도차가 무조건 0m 동일
+    # 나침반이 제외된 순수 정면 시야 ROI 크롭
+    screen_center_roi = src_img[center_roi_y1:center_roi_y2, center_roi_x1:center_roi_x2].copy()
 
-    # 탄도학 테이블 매칭 (H=0 대입)
+    # 정면 시야 영역에서 지면 마커 탐색
+    _, match_m_screen = find_markers_simultaneously(
+        screen_center_roi, tpl_player, tpl_player, scale_range, target_hex
+    )
+
+    if not (match_m_screen and match_m_screen["max_val"] >= config.MATCH_THRESHOLD):
+        no_marker = True
+        print("⚠️ 정면 시야 내(나침반 제외 구역)에서 마커를 찾지 못했습니다. 고도차를 0m로 계산합니다.")
+        h_diff = 0.0
+    else:
+        no_marker = False
+        # 1. 크롭된 이미지 내에서의 마커 밑변 상대 Y 좌표 계산
+        roi_marker_y = match_m_screen["max_loc"][1] + match_m_screen["h"]
+        
+        # 2. 🌟 중요: 100px 잘라냈던 만큼 더해줘서 원본 1920x1080 기준 '절대 Y 좌표'로 복원
+        marker_y_screen = center_roi_y1 + roi_marker_y
+        
+        # 3. 화면 중심선(수평선 540px)과의 픽셀 편차 계산
+        delta_y = abs(marker_y_screen - 540)
+
+        # 4. 삼각함수 기반 수직 FOV 탄젠트 변환 (config.USER_FOV 변수 사용)
+        hfov_rad = math.radians(config.USER_FOV)
+        v_fov_tan = math.tan(hfov_rad / 2.0) * (9.0 / 16.0)
+        
+        # 5. 3인칭 박격포 캘리브레이션 스케일 적용 (3인칭 비율 상수 0.844 반영)
+        fov_scale_constant = v_fov_tan / 0.844
+        
+        # 6. 고도차 공식 적용 (3인칭 카메라 가상 높이 보정 -2.2m)
+        h_diff = (x_dist * (delta_y / 540.0) * fov_scale_constant) - 2.2
+            
+        # 7. 수평선(540) 기준 고도 부호 판정
+        if marker_y_screen > 540:
+            h_diff = -abs(h_diff)  # 수평선 아래에 찍힘 = 음수 고도차(하향각)
+        else:
+            h_diff = abs(h_diff)   # 수평선 위에 찍힘 = 양수 고도차(상향각)
+
+    # -----------------------------------------------------------------
+    # [파트 C] 탄도학 매칭 및 디버그 시각화 (업데이트)
+    # -----------------------------------------------------------------
+    # 업데이트된 x_dist와 h_diff를 탄도학 공식에 대입
     final_mortar_dist = get_mortar_in_game_distance(x_dist, h_diff, config.MORTAR_STEPS)
 
-    # 6. 미니맵용 디버그 결과 이미지 시각화 생성
+    # 미니맵 디버그창 드로잉 코드 업데이트
     result_img = minimap_roi.copy()
     font = cv2.FONT_HERSHEY_SIMPLEX
     
     cv2.circle(result_img, (p_cx, p_cy), 6, (0, 0, 255), -1) 
-    cv2.circle(result_img, (m_cx, m_cy), 6, (0, 0, 255), -1) 
-    cv2.line(result_img, (p_cx, p_cy), (m_cx, m_cy), (0, 255, 255), 2)
+    cv2.circle(result_img, (m_cx_mini, m_cy_mini), 6, (0, 0, 255), -1) 
+    cv2.line(result_img, (p_cx, p_cy), (m_cx_mini, m_cy_mini), (0, 255, 255), 2)
 
-    # 고도가 동일하므로 상단 텍스트 박스만 노출
-    cv2.rectangle(result_img, (5, 5), (320, 65), (0, 0, 0), -1)
-    cv2.putText(result_img, f"Minimap Dist: {x_dist:.2f}m", (10, 25), font, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+    # 안내 박스 영역 확장 (고도차 정보 추가 표시)
+    cv2.rectangle(result_img, (5, 5), (320, 85), (0, 0, 0), -1)
+    cv2.putText(result_img, f"Horiz Dist: {x_dist:.1f}m", (10, 22), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(result_img, f"Height Diff: {h_diff:.1f}m", (10, 42), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
     if isinstance(final_mortar_dist, (int, float)):
-        cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (10, 50), font, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
-        print(f"🎯 [미니맵 계산 완료] 수평(고도동일):{x_dist:.1f}m -> 조준:{final_mortar_dist}m")
+        cv2.putText(result_img, f"🎯 IN-GAME DIST: {final_mortar_dist}m", (10, 70), font, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+        print(f"🎯 [미니맵+고도 연산 완료] 수평:{x_dist:.1f}m, 고도차:{h_diff:.1f}m -> 최종 조준 사거리:{final_mortar_dist}m")
         last_calculated_distance = final_mortar_dist
-        speak(f"{final_mortar_dist} meters")
+        if no_marker:
+            speak(f"{final_mortar_dist} meters. no")
+        else:
+            speak(f"{final_mortar_dist} meters")
     else:
         display_msg, voice_msg = handle_error_messages(final_mortar_dist)
-        cv2.putText(result_img, display_msg, (10, 50), font, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(result_img, display_msg, (10, 70), font, 0.6, (0, 0, 255), 2, cv2.LINE_AA)
         speak(voice_msg)
 
     cv2.imwrite("images/debug/result.png", result_img)
-    print("[완료] 미니맵 결과가 'images/debug/result.png'에 업데이트되었습니다.")
+    print("[완료] 결과가 'images/debug/result.png'에 업데이트되었습니다.")
 
 
 def handle_error_messages(final_mortar_dist):
