@@ -265,55 +265,102 @@ def run_minimap_calculator(test=False):
     minimap_size = minimap_roi.shape[1]
     x_dist = pixel_dist * (700.0 / minimap_size)  # 수평 거리 (D)
 
-# -----------------------------------------------------------------
-    # [파트 B] 삼각함수 공식 기반 고도차(h_diff) 정밀 연산 (상단 나침반 UI 예외 처리)
     # -----------------------------------------------------------------
-    # 상단 나침반 UI 제거 (Y: 100부터 끝까지)
+    # [파트 B] 삼각함수 공식 기반 고도차(h_diff) 정밀 연산 (디버그 이미지 추가)
+    # -----------------------------------------------------------------
     center_roi_y1 = 100
     center_roi_y2 = height  # 1080
     
-    # 화면 중앙부 가로 영역 (X: 960 기준 좌우 100px -> 860 ~ 1060)
-    center_roi_x1 = (width // 2) - 30
-    center_roi_x2 = (width // 2) + 30
+    center_roi_x1 = (width // 2) - 20
+    center_roi_x2 = (width // 2) + 20
     
-    # 나침반이 제외된 순수 정면 시야 ROI 크롭
     screen_center_roi = src_img[center_roi_y1:center_roi_y2, center_roi_x1:center_roi_x2].copy()
 
-    # 정면 시야 영역에서 지면 마커 탐색
-    _, match_m_screen = find_markers_simultaneously(
-        screen_center_roi, tpl_player, tpl_player, scale_range, target_hex
-    )
+    # 1. 정면 전용 스케일 범위 세팅
+    screen_scale_range = np.linspace(0.5, 4.0, 36)[::-1]
+    
+    # 색상 바운드 설정
+    r = int(target_hex[0:2], 16)
+    g = int(target_hex[2:4], 16)
+    b = int(target_hex[4:6], 16)
+    lower_bound = np.array([max(0, b-config.TOL), max(0, g-config.TOL), max(0, r-config.TOL)], dtype=np.uint8)
+    upper_bound = np.array([min(255, b+config.TOL), min(255, g+config.TOL), min(255, r+config.TOL)], dtype=np.uint8)
 
-    if not (match_m_screen and match_m_screen["max_val"] >= config.MATCH_THRESHOLD):
+    # 2. 정면 시야 마스크 생성 및 모폴로지
+    mask_screen = cv2.inRange(screen_center_roi, lower_bound, upper_bound)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    mask_screen = cv2.dilate(mask_screen, kernel, iterations=1)
+    mask_screen = cv2.erode(mask_screen, kernel, iterations=1)
+
+    # 🌟 [디버그 추가 1] 정면 시야 마스크 이미지를 파일로 저장
+    # 실행 경로에 'debug_screen_mask.png' 라는 이름으로 정면 마커 마스크가 저장됩니다.
+    cv2.imwrite("images/debug/debug_screen_mask.png", mask_screen)
+
+    # 3. 정면 시야 내의 마커 정밀 매칭
+    contours, _ = cv2.findContours(mask_screen, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    best_m_screen = None
+    m_h, m_w = tpl_marker.shape[:2]
+
+    # 매칭 결과 시각화를 위한 정면 원본 복사본
+    debug_screen_visual = screen_center_roi.copy()
+
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w < 5 or h < 5: continue
+        
+        roi_y1 = max(0, y - 5)
+        roi_y2 = min(mask_screen.shape[0], y + h + 5)
+        roi_x1 = max(0, x - 5)
+        roi_x2 = min(mask_screen.shape[1], x + w + 5)
+        roi_src = mask_screen[roi_y1:roi_y2, roi_x1:roi_x2]
+
+        for scale in screen_scale_range:
+            tw, th = int(m_w * scale), int(m_h * scale)
+            if tw < 5 or th < 5 or tw > roi_src.shape[1] or th > roi_src.shape[0]: 
+                continue
+
+            resized_tpl = cv2.resize(tpl_marker, (tw, th), interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(roi_src, resized_tpl, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+            if best_m_screen is None or max_val > best_m_screen["max_val"]:
+                best_m_screen = {
+                    "max_val": max_val,
+                    "max_loc": (roi_x1 + max_loc[0], roi_y1 + max_loc[1]),
+                    "w": tw, "h": th,
+                    "bbox": (x, y, w, h)  # 디버그 사각형 그리기용
+                }
+
+    # 4. 최종 매칭 검증 및 고도차 계산 연계
+    if not (best_m_screen and best_m_screen["max_val"] >= config.MATCH_THRESHOLD):
         no_marker = True
-        print("⚠️ 정면 시야 내(나침반 제외 구역)에서 마커를 찾지 못했습니다. 고도차를 0m로 계산합니다.")
+        print("⚠️ 정면 시야 내에서 마커 매칭에 실패했습니다. 고도차를 0m로 계산합니다.")
         h_diff = 0.0
     else:
         no_marker = False
-        # 1. 크롭된 이미지 내에서의 마커 밑변 상대 Y 좌표 계산
-        roi_marker_y = match_m_screen["max_loc"][1] + match_m_screen["h"]
-        
-        # 2. 🌟 중요: 100px 잘라냈던 만큼 더해줘서 원본 1920x1080 기준 '절대 Y 좌표'로 복원
+        # 🌟 [디버그 추가 2] 매칭된 마커 위치에 초록색 사각형을 그려서 저장
+        bx, by, bw, bh = best_m_screen["bbox"]
+        cv2.rectangle(debug_screen_visual, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
+        cv2.putText(debug_screen_visual, f"{best_m_screen['max_val']:.2f}", (bx, max(15, by - 5)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        cv2.imwrite("images/debug/debug_screen_match.png", debug_screen_visual)
+
+        # 정상 검출 완료 후 Y 좌표 추출 및 삼각함수 연산 (이하 동일)
+        roi_marker_y = best_m_screen["max_loc"][1] + best_m_screen["h"]
         marker_y_screen = center_roi_y1 + roi_marker_y
         
-        # 3. 화면 중심선(수평선 540px)과의 픽셀 편차 계산
         delta_y = abs(marker_y_screen - 540)
-
-        # 4. 삼각함수 기반 수직 FOV 탄젠트 변환 (config.USER_FOV 변수 사용)
         hfov_rad = math.radians(config.USER_FOV)
         v_fov_tan = math.tan(hfov_rad / 2.0) * (9.0 / 16.0)
-        
-        # 5. 3인칭 박격포 캘리브레이션 스케일 적용 (3인칭 비율 상수 0.844 반영)
         fov_scale_constant = v_fov_tan / 0.844
         
-        # 6. 고도차 공식 적용 (3인칭 카메라 가상 높이 보정 -2.2m)
         h_diff = (x_dist * (delta_y / 540.0) * fov_scale_constant) - 2.2
             
-        # 7. 수평선(540) 기준 고도 부호 판정
         if marker_y_screen > 540:
-            h_diff = -abs(h_diff)  # 수평선 아래에 찍힘 = 음수 고도차(하향각)
+            h_diff = -abs(h_diff)
         else:
-            h_diff = abs(h_diff)   # 수평선 위에 찍힘 = 양수 고도차(상향각)
+            h_diff = abs(h_diff)
 
     # -----------------------------------------------------------------
     # [파트 C] 탄도학 매칭 및 디버그 시각화 (업데이트)
