@@ -21,15 +21,18 @@ COLOR_BLIND = [
 COLOR_LIST = COLOR_BLIND[2]
 COLOR_NAMES = ["YELLOW", "RED", "BLUE", "GREEN"]
 
-# 🗺️ 지원하는 맵 순서 리스트 (1~6번 매핑용)
-MAP_LIST = ['erangel', 'miramar', 'vikendi', 'sanhok', 'karakin', 'jackal']
+# 🗺️ 지원하는 맵 순서 리스트 (1~9번 매핑용)
+MAP_LIST = ['erangail', 'miramar', 'Tay go', 'vikendi', 'rondo', 'sanhok', 'paramo', 'karahkin', 'jackal']
 
 # 🗺️ 맵별 물리 스케일 변환 계수 매핑
 MAP_SCALES = {
     'erangel':  0.9765625,
     'miramar':  0.9765625,
-    'vikendi':  1.30208333,
+    'taego':    0.9765625,
+    'vikendi':  0.9765625,
+    'rondo':    0.9765625,
     'sanhok':   0.9765625,
+    'paramo':   0.9765625,
     'karakin':  0.9765625,
     'jackal':   0.48828125
 }

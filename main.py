@@ -27,21 +27,22 @@ def start_map_selection():
     is_selecting_color = False  # 색상 선택 모드 해제
     print("\n==================================================")
     print(" 🗺️ [맵 선택 모드] 숫자 1 ~ 6을 눌러 선택하세요.")
-    print(" 1: Erangel  | 2: Miramar | 3: Vikendi")
-    print(" 4: Sanhok   | 5: Karakin | 6: Jackal")
+    print(" 1: Erangel  | 2: Miramar | 3: Taego")
+    print(" 4: Vikendi  | 5: Rondo   | 6: Sanhok")
+    print(" 7: Paramo   | 8: Karakin | 9: Jackal")
     print("==================================================")
     speak("Select map")
 
 
 def select_map_by_number(number):
-    """숫자 1~6 입력 시 호출되어 전역 current_map을 변경"""
+    """숫자 1~9 입력 시 호출되어 전역 current_map을 변경"""
     global current_map, is_selecting_map
     if is_selecting_map:
         idx = number - 1
         if 0 <= idx < len(config.MAP_LIST):
             current_map = config.MAP_LIST[idx]
             print(f"\n[변경 완료] 🗺️ 현재 타겟 맵이 [ {current_map.upper()} ] (으)로 변경되었습니다.")
-            speak(current_map.upper())
+            speak(current_map.lower())
             is_selecting_map = False 
 
 
@@ -444,14 +445,14 @@ def main(test=False):
     print(f" 기본 선택된 맵: [ {current_map.upper()} ] (F8 대형 지도용)")
     print(f" 기본 선택된 색상: [ {config.COLOR_NAMES[current_color_idx]} ]")
     print(" 🎨 다른 마커 선택하기: [ F6 ] 누른 후 숫자 [ 1 ~ 4 ] 선택")
-    print(" 🗺️ 다른 맵 선택하기: [ F7 ] 누른 후 숫자 [ 1 ~ 6 ] 선택")
+    print(" 🗺️ 다른 맵 선택하기: [ F7 ] 누른 후 숫자 [ 1 ~ 9 ] 선택")
     print(" 🎯 박격포 고도 계산1: 전체 지도를 열고 [ F8 ] 누르기")
     print(" 🧭 박격포 평지 계산2: 화면 우측 하단 미니맵 상태에서 [ F9 ] 누르기")
     print(" 👂 박격포 거리 다시 듣기는 [ F10 ] 누르기")
     print("==================================================")
 
     # 숫자 1~6 핫키 등록 핸들러
-    for i in range(1, 7):
+    for i in range(1, 10):
         keyboard.add_hotkey(str(i), lambda n=i: select_shortcut_handler(n))
 
     # 핫키 등록

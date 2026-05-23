@@ -76,12 +76,15 @@
     <div id="header">
         <label for="map-select">MAP SELECT :</label>
         <select id="map-select">
-            <option value="erangel">Erangel</option>
+            <option value="erangel" selected>Erangel</option>
             <option value="miramar">Miramar</option>
+            <option value="taego">Taego</option>
             <option value="vikendi">Vikendi</option>
+            <option value="rondo">Rondo</option>
             <option value="sanhok">Sanhok</option>
+            <option value="paramo">Paramo</option>
             <option value="karakin">Karakin</option>
-            <option value="jackal" selected>Jackal</option>
+            <option value="jackal">Jackal</option>
         </select>
     </div>
 
@@ -100,12 +103,15 @@
         const SEGMENTS = 512; // 레이캐스팅 및 렌더링 밸런스를 위해 512로 안정화
 
         const MAP_SCALES = {
-            'erangel': 0.9765625,
-            'miramar': 0.9765625,
-            'vikendi': 1.3020833333333333,
-            'sanhok':  0.9765625,
-            'karakin': 0.9765625,
-            'jackal':  0.48828125
+            'erangel':  0.9765625,
+            'miramar':  0.9765625,
+            'taego':    0.9765625,
+            'vikendi':  0.9765625,
+            'rondo':    0.9765625,
+            'sanhok':   0.9765625,
+            'paramo':   0.9765625,
+            'karakin':  0.9765625,
+            'jackal':   0.48828125
         };
 
         const scene = new THREE.Scene();
@@ -206,7 +212,7 @@
             const currentScaleXY = MAP_SCALES[mapName] || 0.9765625;
             const worldSize = MAP_PIXELS * currentScaleXY; 
             
-            const heightmapUrl = `../image/heightmap/${mapName}_heightmap.png`;
+            const heightmapUrl = `../images/heightmap/${mapName}_heightmap.png`;
 
             const img = new Image();
             img.src = heightmapUrl;
