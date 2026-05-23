@@ -223,3 +223,6 @@ images/image.png
 images/screenshot.png
 images/debug/*
 tmp_audio/*
+
+data/*
+result/*

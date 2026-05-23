@@ -5,3 +5,4 @@ opencv-python
 gTTS
 pygame
 pydub
+Pillow
