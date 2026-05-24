@@ -3,7 +3,7 @@ import os
 from gtts import gTTS
 import pygame
 from pydub import AudioSegment
-from config import TTS_SPEED_FACTOR
+from config import TTS_LANG, TTS_SPEED_FACTOR
 
 # 오디오 파일 임시 폴더 생성
 if not os.path.exists("tmp_audio"):
@@ -21,7 +21,7 @@ def _speak_google(text):
         
         # 1. 원본 파일이 없다면 구글에서 먼저 다운로드
         if not os.path.exists(orig_path):
-            tts = gTTS(text=text, lang='en', slow=False)
+            tts = gTTS(text=text, lang=TTS_LANG, slow=False)
             tts.save(orig_path)
             
             # 2. 다운로드 직후 pydub을 이용해 속도를 물리적으로 변환 후 저장 (최초 1회만 연산)

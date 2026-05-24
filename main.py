@@ -31,7 +31,7 @@ def start_map_selection():
     print(" 4: Vikendi  | 5: Rondo   | 6: Sanhok")
     print(" 7: Paramo   | 8: Karakin | 9: Jackal")
     print("==================================================")
-    speak("Select map")
+    speak(config.TTS_SCRIPT['select_map'])
 
 
 def select_map_by_number(number):
@@ -42,7 +42,7 @@ def select_map_by_number(number):
         if 0 <= idx < len(config.MAP_LIST):
             current_map = config.MAP_LIST[idx]
             print(f"\n[변경 완료] 🗺️ 현재 타겟 맵이 [ {current_map.upper()} ] (으)로 변경되었습니다.")
-            speak(current_map.lower())
+            speak(config.TTS_MAP_LIST[idx])
             is_selecting_map = False 
 
 
@@ -56,7 +56,7 @@ def start_color_selection():
     print(" 1: Yellow (e9e511) | 2: Pink (ff00ff)")
     print(" 3: Red (ff0000)    | 4: Blue (0000ff)")
     print("==================================================")
-    speak("Select color")
+    speak(config.TTS_SCRIPT['select_color'])
 
 
 def select_shortcut_handler(number):
@@ -81,7 +81,7 @@ def replay_last_distance():
     if last_calculated_distance is not None:
         speak(f"{last_calculated_distance} meters")
     else:
-        speak("No")
+        speak(config.TTS_SCRIPT['impossible'])
 
 
 def run_calculator(test=False):
@@ -89,7 +89,7 @@ def run_calculator(test=False):
     global current_map, current_color_idx
     
     print(f"\n[{time.strftime('%H:%M:%S')}] 🎯 F8 감지! [ {current_map.upper()} ] 전체 지도 분석을 시작합니다... (타겟 색상: {config.COLOR_NAMES[current_color_idx]})")
-    speak("shot")
+    speak(config.TTS_SCRIPT['shot'])
 
     # 1. 실시간 이미지 로드
     if test:
@@ -99,7 +99,7 @@ def run_calculator(test=False):
         
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
-        speak("screen capture error")
+        speak(config.TTS_SCRIPT['capture_error'])
         return
 
     h, w, _ = src_img.shape
@@ -115,7 +115,7 @@ def run_calculator(test=False):
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] player.png 또는 marker.png 템플릿 이미지를 확인하세요.")
-        speak("template image error")
+        speak(config.TTS_SCRIPT['template_error'])
         return
 
     # 2. 객체 탐지 수행
@@ -132,7 +132,7 @@ def run_calculator(test=False):
 
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m and match_m["max_val"] >= config.MATCH_THRESHOLD):
         print(f"❌ 플레이어 또는 마커를 화면에서 찾을 수 없습니다. (현재 선택 맵: {current_map.upper()})")
-        speak("no marker")
+        speak(config.TTS_SCRIPT['no_marker'])
         return
 
     # 좌표 변환 로직
@@ -157,7 +157,7 @@ def run_calculator(test=False):
     heightmap = cv2.imread(heightmap_path, cv2.IMREAD_UNCHANGED)
     if heightmap is None:
         print(f"[오류] 하이트맵 이미지({heightmap_path})를 로드할 수 없습니다. 파일명을 확인해 주세요.")
-        speak("heightmap error")
+        speak(config.TTS_SCRIPT['heightmap_error'])
         return
         
     hm_h, hm_w = heightmap.shape[:2]
@@ -201,7 +201,7 @@ def run_minimap_calculator(test=False):
     global current_color_idx, last_calculated_distance
     
     print(f"\n[{time.strftime('%H:%M:%S')}] 🧭 F9 감지! 미니맵 거리 및 화면 중앙 Y축 고도차 연산을 시작합니다...")
-    speak("shot")
+    speak(config.TTS_SCRIPT['shot'])
 
     # 1. 원본 전체 화면 이미지 로드
     if test:
@@ -211,7 +211,7 @@ def run_minimap_calculator(test=False):
         
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
-        speak("screen capture error")
+        speak(config.TTS_SCRIPT['capture_error'])
         return
 
     height, width, _ = src_img.shape  # 기준: 1920 x 1080
@@ -241,7 +241,7 @@ def run_minimap_calculator(test=False):
 
     if tpl_player is None or tpl_marker is None:
         print("[오류] 템플릿 이미지를 확인하세요.")
-        speak("template image error")
+        speak(config.TTS_SCRIPT['template_error'])
         return
 
     scale_range = np.linspace(0.1, 1.0, 45)[::-1]
@@ -254,7 +254,7 @@ def run_minimap_calculator(test=False):
 
     if not (match_p and match_p["max_val"] >= config.MATCH_THRESHOLD) or not (match_m_mini and match_m_mini["max_val"] >= config.MATCH_THRESHOLD):
         print("❌ 미니맵에서 플레이어 또는 마커를 찾을 수 없습니다.")
-        speak("no marker")
+        speak(config.TTS_SCRIPT['no_marker'])
         return
 
     p_cx = match_p["max_loc"][0] + (match_p["w"] // 2)
