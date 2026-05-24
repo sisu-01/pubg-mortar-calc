@@ -99,9 +99,9 @@
     </div>
 
     <script>
-        const MAP_PIXELS = 8192;              
-        const SEGMENTS = 512; // 레이캐스팅 및 렌더링 밸런스를 위해 512로 안정화
+        const SEGMENTS = 512; 
 
+        // 픽셀 당 비율 (실제 인게임 km / heightmap 픽셀 해상도)
         const MAP_SCALES = {
             'erangel':  0.9765625,
             'miramar':  0.9765625,
@@ -128,7 +128,6 @@
         controls.maxPolarAngle = Math.PI / 2 - 0.01; 
         controls.maxDistance = 1500000; 
 
-        // --- 밝은 조명 세팅 ---
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambientLight);
 
@@ -145,7 +144,6 @@
         
         const textureLoader = new THREE.TextureLoader();
 
-        // --- 💡 밝기 및 가시성 보정 셰이더 ---
         const terrainShaderMaterial = new THREE.ShaderMaterial({
             uniforms: {
                 heightmap: { value: null },
@@ -163,11 +161,9 @@
                     vUv = uv;
                     vec4 tex = texture2D(heightmap, uv);
                     
-                    // R, G 채널 결합 및 복원
                     float raw_pixel = (tex.r * 255.0 * 256.0) + (tex.g * 255.0);
                     if(tex.g == 0.0 && tex.r > 0.0) { raw_pixel = tex.r * 65535.0; } 
 
-                    // 정밀 고도 공식 적용
                     float actual_height = ((raw_pixel - zReference) / 65535.0) * 512.0 * zScale;
 
                     vec3 transformed = vec3(position.x, position.y, actual_height);
@@ -180,26 +176,19 @@
                 varying vec3 vPosition;
                 varying vec2 vUv;
                 void main() {
-                    // 💡 지형 굴곡이 눈에 잘 띄도록 수직 높이 기반의 컬러 램프 및 간이 음영 적용
-                    float heightFactor = (vPosition.z + 500.0) / 1500.0; // 높이별 음영 가중치
-                    
-                    // 기본 지형 색상 (기존보다 밝은 초록-회색 계열 톤 적용)
+                    float heightFactor = (vPosition.z + 500.0) / 1500.0;
                     vec3 baseColor = mix(vec3(0.3, 0.45, 0.25), vec3(0.5, 0.55, 0.45), clamp(heightFactor, 0.0, 1.0));
                     
-                    // 가짜 월드 스페이스 라이팅 (빛이 위에서 밝게 내리쬐는 효과)
                     vec3 fakeLightDir = normalize(vec3(0.3, 0.3, 1.0));
-                    
-                    // 픽셀 편차를 이용해 미세 굴곡 섀이딩 표현
                     vec3 dx = dFdx(vPosition);
                     vec3 dy = dFdy(vPosition);
                     vec3 certNormal = normalize(cross(dx, dy));
                     
                     float light = max(dot(certNormal, fakeLightDir), 0.0) * 0.6 + 0.4;
-                    
                     gl_FragColor = vec4(baseColor * light, 1.0);
                 }
             `,
-            extensions: { derivatives: true } // 미세 굴곡 연산용 익스텐션 활성화
+            extensions: { derivatives: true }
         });
 
         function loadTerrain(mapName) {
@@ -209,26 +198,26 @@
             if (terrainMesh) { scene.remove(terrainMesh); terrainMesh.geometry.dispose(); }
             if (seaMesh) { scene.remove(seaMesh); seaMesh.geometry.dispose(); seaMesh.material.dispose(); }
 
-            const currentScaleXY = MAP_SCALES[mapName] || 0.9765625;
-            const worldSize = MAP_PIXELS * currentScaleXY; 
-            
             const heightmapUrl = `../images/heightmap/${mapName}_heightmap.png`;
 
             const img = new Image();
             img.src = heightmapUrl;
             img.onload = function() {
+                // 이미지 실제 크기 기반으로 월드 사이즈 계산
+                const imgWidth = img.width; 
+                const currentScaleXY = MAP_SCALES[mapName] || 0.9765625;
+                const worldSize = imgWidth * currentScaleXY; 
                 
                 const canvas = document.createElement('canvas');
                 canvas.width = SEGMENTS + 1;
                 canvas.height = SEGMENTS + 1;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, MAP_PIXELS, MAP_PIXELS, 0, 0, SEGMENTS + 1, SEGMENTS + 1);
+                ctx.drawImage(img, 0, 0, imgWidth, imgWidth, 0, 0, SEGMENTS + 1, SEGMENTS + 1);
                 currentRawData = ctx.getImageData(0, 0, SEGMENTS + 1, SEGMENTS + 1).data;
 
                 textureLoader.load(heightmapUrl, function(texture) {
                     document.getElementById('loading').style.display = 'none';
 
-                    // 텍스처 필터 변경으로 계단현상 최소화 및 밝기 선명도 확보
                     texture.minFilter = THREE.LinearFilter;
                     texture.magFilter = THREE.LinearFilter;
                     texture.needsUpdate = true;
@@ -236,12 +225,35 @@
                     terrainShaderMaterial.uniforms.heightmap.value = texture;
 
                     const geometry = new THREE.PlaneGeometry(worldSize, worldSize, SEGMENTS, SEGMENTS);
+                    const pos = geometry.attributes.position.array;
+
+                    // CPU 레이캐스팅을 위해 Geometry에 직접 높이값 적용
+                    for (let i = 0; i <= SEGMENTS; i++) {
+                        for (let j = 0; j <= SEGMENTS; j++) {
+                            const index = i * (SEGMENTS + 1) + j;
+                            
+                            let r = currentRawData[index * 4];
+                            let g = currentRawData[index * 4 + 1];
+                            let raw_pixel = (r * 256.0) + g;
+                            if(g === 0 && r > 0) { raw_pixel = r * 257.0; } 
+
+                            const Z_SCALE = 0.96;
+                            const Z_REFERENCE_PIXEL = 32639.0;
+                            const actual_height = ((raw_pixel - Z_REFERENCE_PIXEL) / 65535.0) * 512.0 * Z_SCALE;
+
+                            // PlaneGeometry는 XY평면이므로 Z축을 위로 솟게 만듦
+                            pos[index * 3 + 2] = actual_height; 
+                        }
+                    }
+
+                    // 높이가 변했으므로 BoundingBox를 갱신해야 마우스 레이캐스팅이 정상 작동함
+                    geometry.computeBoundingBox();
+                    geometry.computeBoundingSphere();
                     
                     terrainMesh = new THREE.Mesh(geometry, terrainShaderMaterial);
                     terrainMesh.rotation.x = -Math.PI / 2; 
                     scene.add(terrainMesh);
 
-                    // 바다 생성 (투명한 블루)
                     const seaGeometry = new THREE.PlaneGeometry(worldSize, worldSize);
                     const seaMaterial = new THREE.MeshStandardMaterial({
                         color: 0x224477, transparent: true, opacity: 0.5, roughness: 0.1
@@ -277,36 +289,17 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(seaMesh);
+            
+            // 바다 평면이 아닌, 실제 3D 굴곡이 적용된 지형 메쉬를 직접 클릭 체크
+            const intersects = raycaster.intersectObject(terrainMesh);
 
             if (intersects.length > 0) {
                 const point = intersects[0].point;
-                const currentScaleXY = MAP_SCALES[mapSelect.value] || 0.9765625;
-                const worldSize = MAP_PIXELS * currentScaleXY;
 
-                let u = (point.x + worldSize / 2) / worldSize;
-                let v = (point.z + worldSize / 2) / worldSize;
-                
-                u = Math.max(0, Math.min(1, u));
-                v = Math.max(0, Math.min(1, v));
-
-                const imgX = Math.floor(u * SEGMENTS);
-                const imgY = Math.floor(v * SEGMENTS);
-                const dataIndex = (imgY * (SEGMENTS + 1) + imgX) * 4;
-
-                let r = currentRawData[dataIndex];
-                let g = currentRawData[dataIndex + 1];
-                let raw_pixel = (r * 256.0) + g;
-                
-                if(g === 0 && r > 0) { raw_pixel = r * 257.0; } 
-
-                const Z_SCALE = 0.96;
-                const Z_REFERENCE_PIXEL = 32639.0;
-                const actual_height = ((raw_pixel - Z_REFERENCE_PIXEL) / 65535.0) * 512.0 * Z_SCALE;
-
+                // CPU 지오메트리 자체가 굴곡져 있으므로, 픽셀 좌표 재계산 없이 point.y를 바로 렌더링
                 document.getElementById('pos-x').innerText = point.x.toFixed(2);
                 document.getElementById('pos-y').innerText = point.z.toFixed(2); 
-                document.getElementById('pos-z').innerText = actual_height.toFixed(2);
+                document.getElementById('pos-z').innerText = point.y.toFixed(2);
             }
         }
 
