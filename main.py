@@ -12,8 +12,8 @@ import capture
 from tts import speak  
 
 # --- 💡 글로벌 변수 선언 및 초기값 설정 ---
-current_map = 'jackal'
-current_color_idx = 0  # 기본값: 0번 (Yellow)
+current_map = config.DEFAULT_MAP
+current_color_idx = config.DEFAULT_COLOR
 
 is_selecting_map = False      
 is_selecting_color = False
