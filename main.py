@@ -96,6 +96,7 @@ def run_calculator(test=False):
         src_img = cv2.imread('images/image.png')
     else:
         src_img = capture.get_screenshot()
+        cv2.imwrite("images/debug/0_capture.png", src_img)
         
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
@@ -208,6 +209,7 @@ def run_minimap_calculator(test=False):
         src_img = cv2.imread('images/screenshot.png')
     else:
         src_img = capture.get_screenshot()
+        cv2.imwrite("images/debug/0_capture.png", src_img)
         
     if src_img is None:
         print("[오류] 화면을 캡처하지 못했습니다.")
@@ -272,7 +274,7 @@ def run_minimap_calculator(test=False):
     # -----------------------------------------------------------------
     # [파트 B] 삼각함수 공식 기반 고도차(h_diff) 정밀 연산 (디버그 이미지 추가)
     # -----------------------------------------------------------------
-    center_roi_y1 = 100
+    center_roi_y1 = 80
     center_roi_y2 = height  # 1080
     
     center_roi_x1 = (width // 2) - 20
