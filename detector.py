@@ -26,12 +26,12 @@ def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     # 2. [늘리기 단계] 팽창(Dilation) 연산 수행 및 저장
     # 주변의 빈틈이나 구멍을 메우기 위해 흰색 영역이 확장된 상태입니다.
-    mask_dilated = cv2.dilate(mask_src, kernel, iterations=1)
-    cv2.imwrite("images/debug/2_dilated_mask_src.png", mask_dilated)
+    mask_src = cv2.dilate(mask_src, kernel, iterations=1)
+    cv2.imwrite("images/debug/2_dilated_mask_src.png", mask_src)
     # 3. [줄이기 단계] 침식(Erosion) 연산 수행 및 저장 (최종 결과물)
     # 늘어난 외곽선을 다시 원상복구하여 형태를 다듬은 상태입니다.
-    mask_src = cv2.erode(mask_dilated, kernel, iterations=1)
-    cv2.imwrite("images/debug/3_yes_morph_mask_src.png", mask_src)
+    # mask_src = cv2.erode(mask_dilated, kernel, iterations=1)
+    # cv2.imwrite("images/debug/3_yes_morph_mask_src.png", mask_src)
 
     # 3. 템플릿 정보 로드
     p_h, p_w = tpl_player.shape[:2]
