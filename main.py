@@ -93,7 +93,7 @@ def run_calculator(test=False):
 
     # 1. 실시간 이미지 로드
     if test:
-        src_img = cv2.imread('images/image.png')
+        src_img = cv2.imread('images/test.png')
     else:
         src_img = capture.get_screenshot()
         cv2.imwrite("images/debug/0_capture.png", src_img)
@@ -206,7 +206,7 @@ def run_minimap_calculator(test=False):
 
     # 1. 원본 전체 화면 이미지 로드
     if test:
-        src_img = cv2.imread('images/screenshot.png')
+        src_img = cv2.imread('images/test.png')
     else:
         src_img = capture.get_screenshot()
         cv2.imwrite("images/debug/0_capture.png", src_img)
