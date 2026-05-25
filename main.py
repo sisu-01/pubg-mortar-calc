@@ -257,8 +257,11 @@ def run_minimap_calculator(test=False):
         speak(config.TTS_SCRIPT['no_marker'])
         return
 
-    p_cx = match_p["max_loc"][0] + (match_p["w"] // 2)
-    p_cy = match_p["max_loc"][1] + (match_p["h"] // 2)
+    # -------------------------------------------------------------
+    # [수정된 부분] 플레이어 중심점: 바운딩 박스 대신 동그라미의 실제 무게중심 사용
+    p_cx = match_p["center_mass"][0]
+    p_cy = match_p["center_mass"][1]
+
     m_cx_mini = match_m_mini["max_loc"][0] + (match_m_mini["w"] // 2)
     m_cy_mini = match_m_mini["max_loc"][1] + match_m_mini["h"]
 

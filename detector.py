@@ -71,11 +71,32 @@ def find_markers_simultaneously(screenshot_color, tpl_player, tpl_marker, scale_
                 res = cv2.matchTemplate(roi_src, resized_tpl, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
+                # 현재 스케일에서 최고 매칭율을 갱신했다면
                 if best_player is None or max_val > best_player["max_val"]:
+                    
+                    # --- [여기서부터 추가된 정중앙 분석 코드] ---
+                    
+                    # 방법 1. 모멘트(Moments)를 이용한 무게중심 구하기 (추천)
+                    M = cv2.moments(contour)
+                    if M["m00"] != 0:
+                        center_x = int(M["m10"] / M["m00"])
+                        center_y = int(M["m01"] / M["m00"])
+                    else:
+                        # 예외 처리: 아주 작은 점일 경우 바운딩 박스의 중심 사용
+                        center_x = x + w // 2
+                        center_y = y + h // 2
+
+                    # 방법 2. 최소 외곽 원(Min Enclosing Circle)의 중심 구하기
+                    (circle_x, circle_y), radius = cv2.minEnclosingCircle(contour)
+                    
+                    # ------------------------------------------
+
                     best_player = {
                         "max_val": max_val,
-                        "max_loc": (roi_x1 + max_loc[0], roi_y1 + max_loc[1]),
-                        "w": tw, "h": th
+                        "max_loc": (roi_x1 + max_loc[0], roi_y1 + max_loc[1]), # 기존 사각형 좌상단
+                        "w": tw, "h": th,
+                        "center_mass": (center_x, center_y),                # 동그라미의 무게중심 좌표
+                        "center_circle": (int(circle_x), int(circle_y))     # 동그라미 외곽 원 중심 좌표
                     }
 
         # ---------------------------------------------------------
