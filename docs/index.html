@@ -198,7 +198,12 @@
             if (terrainMesh) { scene.remove(terrainMesh); terrainMesh.geometry.dispose(); }
             if (seaMesh) { scene.remove(seaMesh); seaMesh.geometry.dispose(); seaMesh.material.dispose(); }
 
-            const heightmapUrl = `../images/heightmap/${mapName}_heightmap.png`;
+            // GitHub Pages 배포 환경인지 확인 (호스트네임에 github.io가 포함되는지 체크)
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            // GitHub Pages라면 저장소 이름(/pubg-mortar-calc)을 앞에 붙이고, 로컬 환경이면 비워둡니다.
+            const basePath = isGitHubPages ? '/pubg-mortar-calc' : '';
+            // 최종 URL 조립 (상대 경로인 ../ 대신 루트 기준 경로로 접근)
+            const heightmapUrl = `${basePath}/images/heightmap/${mapName}_heightmap.png`;
 
             const img = new Image();
             img.src = heightmapUrl;
