@@ -2,7 +2,9 @@
 
 DEFAULT_MAP = 'jackal'
 # 0노랑 1빨강 2파랑 3초록
-DEFAULT_COLOR = 2
+DEFAULT_COLOR = 0
+# 0 기본, 1 녹색맹, 2 적색맹, 3 청색맹
+DEFAULT_COLORBLIND = 1
 
 # ==========================================
 # [설정값] 캡처 모드를 설정하세요.
@@ -22,7 +24,7 @@ COLOR_BLIND = [
   ["fbed21", "f47016", "2859e0", "1ac68d"],
   ["fbed21", "f16448", "4378bb", "00d1cb"],
 ]
-COLOR_LIST = COLOR_BLIND[2]
+COLOR_LIST = COLOR_BLIND[DEFAULT_COLORBLIND]
 COLOR_NAMES = ["노랑", "빨강", "파랑", "초록"]
 
 # 🗺️ 지원하는 맵 순서 리스트 (1~9번 매핑용)
